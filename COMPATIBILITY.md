@@ -1,6 +1,6 @@
 # RaTeX / Quote 兼容增强版
 
-版本：`ratex-math-render@0.1.8-quote.2`。分支：`compat/quote-selection`。源码和安装包发布于 https://github.com/WDAhyhy/ratex-paseo ，未发布 npm。
+版本：`ratex-math-render@0.1.8-quote.3`。分支：`compat/quote-selection`。源码和安装包发布于 https://github.com/WDAhyhy/ratex-paseo ，未发布 npm。
 
 ## 固定源码与宿主合同
 
@@ -32,6 +32,14 @@ Quote `client/web.ts` 的实际链路：`pointerup -> setTimeout(sync,0) -> read
 - ResizeObserver/窗口 resize 处理 DPR，单纯宽度改变不替换 Canvas，以免干扰选区。所有组件监听及异步重绘均在卸载时清理。
 - 浏览器校验墨迹边缘不是透明截断；六类复杂公式的墨迹宽高与宽裕参考画布完全一致；另检查行内高分数和表格求和的各层 clipping ancestor。
 
+## 手机浏览器 / PWA
+
+- 长行内公式保持自然字号，在公式自身范围横向滚动；块公式和表格公式同样局部滚动，不撑宽整页。横竖屏切换不重建无须变化的位图。
+- 触屏短按公式打开源码；移动超过 10 CSS px、超过 400 ms、pointercancel 或已有文字选区时不打开，避免抢占滑动和长按选字。
+- 源码按钮点击区域至少 44×44 CSS px，工具栏可换行，长 TeX 在源码视图中折行；桌面双击和键盘 Enter/Space 保留。
+- 测试包含 Chromium 触屏模式的 360/390/430 px 竖屏、800 px 横屏、DPR 2/3、深浅主题，另用真实 WebKit 引擎验证 390/844 px。覆盖点按、Chromium 实际触摸滑动、源码复制、原版 Quote 引用和纵向裁切检查。
+- WebKit 是 Linux 浏览器引擎测试，不等同 iPhone Safari 真机；手机系统原生选区手柄未自动化。Android/iOS 原生 Paseo App 不具备该 Canvas 路径，仍显示可选择源码，不能据此声称原生 App 已支持公式渲染。
+
 ## 验证命令
 
 ```bash
@@ -52,9 +60,15 @@ npm run test:browser
 # git clone https://github.com/keefeere/paseo-quote.git ../quote
 # git -C ../quote checkout f6484cb4047b7393d12e86b512d897ff548c4f76
 QUOTE_SOURCE="$(realpath ../quote)" npm run test:quote
+
+# 可选：WebKit 移动触屏模式；仅用于测试工具环境
+npm install --prefix "$RATEX_BROWSER_DEPS" playwright
+"$RATEX_BROWSER_DEPS/node_modules/.bin/playwright" install --with-deps webkit
+RATEX_WEBKIT=1 npm run test:quote
+# 非标准 WebKit 安装可显式设置 RATEX_WEBKIT_BIN
 ```
 
-`test:quote` 加载生产 RaTeX 组件、React Native Web、真实服务端 WASM 和未改动 Quote。含真实鼠标拖选点击、合成 copy 数据严格比较、最终 composer 文本、Reply/Add/Send、Side Chat API payload、纯公式部分选区、反向选区、跨段落、GFM、不同消息不拦截、反复卸载、独立工作、复杂公式主题/DPR/窄屏和截图。测试证据由 `RATEX_EVIDENCE` 指定，默认仓库同级 evidence。支持 `RATEX_CLIENT_BUNDLE=/absolute/path/clientBundle.js` 与 `RATEX_RENDER_SERVER=file:///absolute/path/server-adapter.mjs` 加载官方编译后的实际 client/server bundle；交付包的该路径也已跑过全部 21 组测试。用户气泡位置的浏览器断言使用按宿主容器合同搭建的 fixture，结合真实注册结果验证用户 Transformer 未注册，并非完整宿主截图。
+`test:quote` 加载生产 RaTeX 组件、React Native Web、真实服务端 WASM 和未改动 Quote。含真实鼠标拖选点击、合成 copy 数据严格比较、最终 composer 文本、Reply/Add/Send、Side Chat API payload、纯公式部分选区、反向选区、跨段落、GFM、不同消息不拦截、反复卸载、独立工作、复杂公式主题/DPR/窄屏和截图。测试证据由 `RATEX_EVIDENCE` 指定，默认仓库同级 evidence。支持 `RATEX_CLIENT_BUNDLE=/absolute/path/clientBundle.js` 与 `RATEX_RENDER_SERVER=file:///absolute/path/server-adapter.mjs` 加载官方编译后的实际 client/server bundle；交付时分别记录源码与实际部署 bundle 的运行结果；启用 WebKit 的本版测试包含 23 组集成检查。用户气泡位置的浏览器断言使用按宿主容器合同搭建的 fixture，结合真实注册结果验证用户 Transformer 未注册，并非完整宿主截图。
 
 `npm audit --omit=dev` 检查结果为 0 个生产依赖漏洞。完整 `npm ci` 报告 14 个开发依赖链漏洞（12 moderate / 1 high / 1 critical，来自上游工具链）；未擅自进行可能破坏 SDK 兼容性的全量依赖升级。生产安装包只捆绑运行时依赖。
 
@@ -100,6 +114,6 @@ paseo plugin ls
 - 部分代码 span/代码块选区目前按原子单元恢复完整源码；部分强调/链接选区只保留所选源码，不保证外围标记自动闭合。表格部分选区不补齐未选单元格。完整跨块选区保留原文。
 - 纯公式通过其 selectable TeX 文本选区可引用完整源码。只选中 Canvas 元素但没有任何文本的 Range 时，原版 Quote 的 `selection.toString().trim()` 前置检查会拒绝显示工具栏；RaTeX 不全局篡改 Selection 来绕过它。跨文字拖选正常。
 - 实际鼠标拖选、原版 Quote 工具栏/写入 composer、浏览器原生剪贴板已在 Chromium fixture 验证；Reply/Side Chat 的网络侧是 host API fixture，不是已部署 daemon 的真实 Agent。没有声称已在用户当前 Paseo 安装上验收。
-- 未运行 Safari/Firefox、真机 iOS/Android；非 Web 沿用源码退化行为，已有浏览器测试覆盖 native 平台不发 Canvas RPC。Obscura 非必需且未运行。
+- 已运行 Chromium 与 Linux WebKit 引擎移动模式；未运行 Firefox、真机 iOS/Android 或 iOS Safari。非 Web 沿用源码退化行为，已有浏览器测试覆盖 native 平台不发 Canvas RPC。Obscura 非必需且未运行。
 - 新 Markdown AST 支持常用 GFM，但不是 Paseo 完整渲染器的完全替代。图片仍为标签和 URL，HTML 作为安全文本，不支持完整 reference-link 宿主交互；文件链接和代码位置跳转保留。
 - 公式引擎仍为固定 ratex-wasm 0.1.14，单公式 4096 字符上限、原缓存及错误源码回退不变。超长行内公式不强行断开 TeX；推荐模型输出块级公式。字体默认尺寸与上游相同，不读取 Paseo Appearance 自定义字号。

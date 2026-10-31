@@ -11,6 +11,7 @@ declare const document: {
   head: { appendChild(node: unknown): void };
   /** FontFaceSet, absent on older engines. */
   fonts?: { load(font: string): Promise<unknown> };
+  getSelection(): { isCollapsed: boolean } | null;
 };
 declare const window: {
   devicePixelRatio?: number;
@@ -39,6 +40,7 @@ type WebCanvas = {
 type HostNode = {
   appendChild(node: unknown): unknown;
   innerHTML: string;
+  style: { display: string; width: string; height: string; maxWidth: string; overflowX: string; overflowY: string; verticalAlign: string };
   clientWidth?: number;
   parentElement?: { clientWidth: number } | null;
   setAttribute(name: string, value: string): void;
@@ -49,6 +51,10 @@ type HostNode = {
 
 type InteractionEvent = {
   key?: string;
+  pointerType?: string;
+  clientX?: number;
+  clientY?: number;
+  timeStamp: number;
   preventDefault(): void;
   stopPropagation(): void;
 };
@@ -120,6 +126,26 @@ export function FormulaCanvas({
       event.stopPropagation();
       onShowSource();
     };
+    let touch: { x: number; y: number; time: number } | undefined;
+    const pointerdown = (event: InteractionEvent) => {
+      touch = event.pointerType === "touch"
+        ? { x: event.clientX ?? 0, y: event.clientY ?? 0, time: event.timeStamp }
+        : undefined;
+    };
+    const pointermove = (event: InteractionEvent) => {
+      if (touch && Math.hypot((event.clientX ?? 0) - touch.x, (event.clientY ?? 0) - touch.y) > 10) touch = undefined;
+    };
+    const pointerup = (event: InteractionEvent) => {
+      const start = touch;
+      touch = undefined;
+      // A short stationary tap opens source. Do not consume swipes, long presses,
+      // or a live text selection: scrolling and the browser's selection handles win.
+      if (event.pointerType !== "touch" || !start || event.timeStamp - start.time > 400) return;
+      if (Math.hypot((event.clientX ?? 0) - start.x, (event.clientY ?? 0) - start.y) > 10) return;
+      if (document.getSelection()?.isCollapsed === false) return;
+      open(event);
+    };
+    const pointercancel = () => { touch = undefined; };
     const keydown = (event: InteractionEvent) => {
       if (event.key === "Enter" || event.key === " ") open(event);
     };
@@ -129,11 +155,19 @@ export function FormulaCanvas({
     host.setAttribute("tabindex", "0");
     host.setAttribute("role", "button");
     host.setAttribute("aria-label", "View formula source");
-    host.setAttribute("title", "Double-click to view source, or press Enter or Space when focused");
+    host.setAttribute("title", "Tap or double-click to view source, or press Enter or Space when focused");
+    host.addEventListener("pointerdown", pointerdown);
+    host.addEventListener("pointerup", pointerup);
+    host.addEventListener("pointermove", pointermove);
+    host.addEventListener("pointercancel", pointercancel);
     host.addEventListener("dblclick", open);
     host.addEventListener("keydown", keydown);
     host.addEventListener("click", click);
     return () => {
+      host.removeEventListener("pointerdown", pointerdown);
+      host.removeEventListener("pointerup", pointerup);
+      host.removeEventListener("pointermove", pointermove);
+      host.removeEventListener("pointercancel", pointercancel);
       host.removeEventListener("dblclick", open);
       host.removeEventListener("keydown", keydown);
       host.removeEventListener("click", click);
@@ -167,7 +201,18 @@ export function FormulaCanvas({
       const layout = drawFormula(displayList, canvas as unknown as HTMLCanvasElement,
         fontSize * dpr, padding * dpr, backgroundColor);
       usedFonts = layout.fonts;
-      canvas.style.display = inline ? "inline-block" : "block";
+      canvas.style.display = "block";
+      if (inline) {
+        // A formula is atomic TeX, so it cannot wrap between glyphs. Keep its
+        // natural bitmap and scroll only the inline host when the phone is narrow.
+        node.style.display = "inline-block";
+        node.style.width = `${layout.width / dpr}px`;
+        node.style.height = `${layout.height / dpr}px`;
+        node.style.maxWidth = "100%";
+        node.style.overflowX = "auto";
+        node.style.overflowY = "hidden";
+        node.style.verticalAlign = `${-(layout.height - layout.baseline) / dpr}px`;
+      }
       canvas.style.width = `${layout.width / dpr}px`;
       canvas.style.height = `${layout.height / dpr}px`;
       canvas.style.verticalAlign = `${-(layout.height - layout.baseline) / dpr}px`;

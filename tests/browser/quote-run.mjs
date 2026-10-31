@@ -50,7 +50,7 @@ const server = createServer(async (req, res) => {
     else if (req.url === "/render") {
       let raw = ""; for await (const chunk of req) raw += chunk;
       res.setHeader("Content-Type", "application/json"); res.end(JSON.stringify(await hostServer(JSON.parse(raw))));
-    } else { res.setHeader("Content-Type", "text/html"); res.end('<!doctype html><meta charset="utf-8"><style>body{margin:20px;font:15px sans-serif;color:#eee}#root{min-width:0}</style><div id="root"></div><script src="/bundle.js"></script>'); }
+    } else { res.setHeader("Content-Type", "text/html"); res.end('<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:20px;font:15px sans-serif;color:#eee}#root{min-width:0}</style><div id="root"></div><script src="/bundle.js"></script>'); }
   } catch (error) { errors.push(String(error)); res.writeHead(500).end(); }
 });
 await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -252,6 +252,122 @@ try {
     releaseFaces(); releaseSlowFace();
     await cold.evaluate(async () => document.fonts.ready);
     await cold.close();
+  }
+
+  // Touch-enabled mobile Chromium, not just a resized desktop window. The iPhone
+  // profile below changes viewport/UA only; it is not Safari/WebKit verification.
+  const mobileResults = [];
+  for (const profile of [
+    { name: 'android-360', width: 360, dpr: 3, ua: 'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Mobile Safari/537.36' },
+    { name: 'iphone-390', width: 390, dpr: 3, ua: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1' },
+    { name: 'android-430', width: 430, dpr: 2, ua: 'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Mobile Safari/537.36' },
+  ]) {
+    const mobile = await browser.newPage();
+    mobile.on('pageerror', error => errors.push(String(error)));
+    await mobile.emulate({ userAgent: profile.ua, viewport: { width: profile.width, height: 900,
+      deviceScaleFactor: profile.dpr, isMobile: true, hasTouch: true } });
+    await mobile.goto(origin);
+    await mobile.waitForFunction(() => window.setMessage);
+    const long = Array.from({ length: 45 }, (_, i) => `x_{${i}}`).join('+');
+    const message = String.raw`活动集 $\mathcal{A}(x)$ 是分到了任务的站点的集合。
+
+长行内公式 $${long}$ 后续文字
+
+$$${long}$$
+
+| Formula | Value |
+|---|---|
+| $${long}$ | $Q$ |`;
+    await mobile.evaluate(text => window.setMessage({ text, compact: true }), message);
+    await mobile.waitForFunction(() => document.querySelectorAll('#message canvas').length === 5);
+    await mobile.evaluate(async () => document.fonts.ready);
+    assert.equal(await mobile.evaluate(text => window.sourceMarkdown(text).blocks.some(node => node.type === 'table'), message),
+      true, 'mobile fixture includes a real GFM table');
+    const geometry = async () => {
+      await mobile.waitForFunction(() => [...document.querySelectorAll('#message canvas')].every(canvas =>
+        Math.abs(canvas.getBoundingClientRect().width * devicePixelRatio - canvas.width) < 1));
+      return mobile.evaluate(() => ({ viewport: innerWidth, pageWidth: document.documentElement.scrollWidth,
+        scrollers: [...document.querySelectorAll('#message *')].filter(node =>
+          ['auto', 'scroll'].includes(getComputedStyle(node).overflowX) && node.scrollWidth > node.clientWidth).length,
+        canvases: [...document.querySelectorAll('#message canvas')].map(canvas => {
+          const rect = canvas.getBoundingClientRect(), clips = [];
+          for (let p = canvas.parentElement; p && p.id !== 'message'; p = p.parentElement) {
+            const style = getComputedStyle(p), box = p.getBoundingClientRect();
+            if (['hidden', 'clip', 'scroll', 'auto'].includes(style.overflowY) &&
+              (rect.top < box.top - 1 || rect.bottom > box.bottom + 1)) clips.push(p.tagName);
+          }
+          return { width: rect.width, height: rect.height, clips };
+        }) }));
+    };
+    for (const light of [false, true]) {
+      await mobile.evaluate(light => window.setMessage({ light }), light);
+      for (const width of [profile.width, 800, profile.width]) {
+        await mobile.setViewport({ width, height: width === 800 ? 430 : 900,
+          deviceScaleFactor: profile.dpr, isMobile: true, hasTouch: true });
+        const measured = await geometry();
+        assert.equal(measured.viewport, width);
+        assert.ok(measured.pageWidth <= width, `${profile.name}: no full-page horizontal overflow`);
+        assert.ok(measured.scrollers >= 3, `${profile.name}: inline/display/table formulas scroll locally`);
+        for (const canvas of measured.canvases) assert.deepEqual(canvas.clips, [], 'no vertical formula clipping');
+        mobileResults.push({ profile: profile.name, light, width, ...measured });
+      }
+    }
+    await mobile.evaluate(() => window.setMessage({ light: false }));
+    await geometry();
+    await mobile.screenshot({ path: path.join(evidence, `${profile.name}-formulas.png`), fullPage: true });
+    // Swipe through a wide inline formula: real touch input must scroll rather than
+    // trigger source view. A long-press/selection must remain browser-owned too.
+    const scroller = (await mobile.$$('#message [aria-label="View formula source"]'))[1];
+    await scroller.evaluate(node => node.scrollIntoView({ block: 'center' }));
+    const box = await scroller.boundingBox();
+    const session = await mobile.createCDPSession();
+    const touch = (type, x) => session.send('Input.dispatchTouchEvent', {
+      type, touchPoints: type === 'touchEnd' ? [] : [{ x, y: box.y + box.height / 2 }],
+    });
+    await touch('touchStart', box.x + box.width - 20);
+    for (let step = 1; step <= 8; step++) await touch('touchMove', box.x + box.width - 20 - step * 20);
+    await touch('touchEnd', 0);
+    await mobile.waitForFunction(() => [...document.querySelectorAll('#message [aria-label="View formula source"]')].some(node => node.scrollLeft > 0));
+    assert.equal(await mobile.$('[data-testid="formula-source"]'), null, 'swiping does not open source');
+    await session.detach();
+    await mobile.evaluate(() => window.getSelection().removeAllRanges());
+    // One finger tap works without desktop double-click, with 44px source actions.
+    await scroller.tap();
+    await mobile.waitForSelector('[data-testid="formula-source"]');
+    const controls = await mobile.$$eval('[data-testid="formula-source"] [role="button"]', buttons => buttons.map(button => {
+      const rect = button.getBoundingClientRect(); return { width: rect.width, height: rect.height };
+    }));
+    for (const control of controls) assert.ok(control.width >= 44 && control.height >= 44, 'touch target is at least 44px');
+    assert.ok(await mobile.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'source view stays inside phone viewport');
+    await (await mobile.$('[aria-label="Copy formula source"]')).tap();
+    await mobile.waitForFunction(() => window.copyWrites.at(-1)?.startsWith('$x_{0}'));
+    assert.equal(await mobile.evaluate(() => window.copyWrites.at(-1)), `$${long}$`);
+    await mobile.screenshot({ path: path.join(evidence, `${profile.name}-source.png`), fullPage: true });
+    await (await mobile.$('[aria-label="Show formula"]')).tap();
+    await mobile.waitForFunction(() => document.querySelectorAll('#message canvas').length === 5);
+    await geometry();
+    // Selection is programmatic here; original Quote and the final touch action are
+    // real. This does not claim automation of OS-native text selection handles.
+    const copied = await mobile.evaluate(() => {
+      const root = document.querySelector('#message').firstChild, range = document.createRange();
+      range.selectNodeContents(root);const selection = window.getSelection();selection.removeAllRanges();selection.addRange(range);
+      const data = new DataTransfer(), event = new ClipboardEvent('copy', { bubbles: true, cancelable: true, clipboardData: data });
+      root.dispatchEvent(event);document.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
+      return data.getData('text/plain');
+    });
+    assert.equal(copied, message);
+    await mobile.waitForFunction(() => getComputedStyle(document.querySelector('[data-paseo-quote]')).display !== 'none');
+    await (await mobile.evaluateHandle(() => document.querySelector('[data-paseo-quote]').shadowRoot.querySelector('[data-action="quote"]'))).tap();
+    assert.equal(await mobile.$eval('[data-composer-input]', node => node.value),
+      message.split('\n').map(line => line ? `> ${line}` : '>').join('\n') + '\n\n');
+    await mobile.close();
+  }
+  await writeFile(path.join(evidence, 'mobile-results.json'), JSON.stringify(mobileResults, null, 2));
+  results.push('mobile-touch-tap-copy-scroll-rotate-quote');
+  if (process.env.RATEX_WEBKIT) {
+    const { testMobileWebkit } = await import('./mobile-webkit.mjs');
+    await testMobileWebkit({ origin, evidence, dependencyRoot: process.env.RATEX_BROWSER_DEPS || root, errors });
+    results.push('webkit-mobile-touch-rotate-copy-quote');
   }
 
   // Exact listener accounting on detached roots proves cleanup on session changes.

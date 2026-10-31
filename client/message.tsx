@@ -96,6 +96,7 @@ function messageStyles(theme: PluginTheme, compact: boolean, platform: Layout["p
     },
     tableCell: {
       flex: 1,
+      minWidth: 0,
       paddingVertical: compact ? 6 : 8,
       paddingHorizontal: compact ? 8 : 10,
       borderRightWidth: 1,

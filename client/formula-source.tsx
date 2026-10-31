@@ -1,7 +1,7 @@
 import type { PluginTheme } from "@getpaseo/plugin";
 import { copyText } from "@getpaseo/plugin/client/ui";
 import { useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Platform, Pressable, Text, View } from "react-native";
 import { CODE_FONT_FAMILY } from "./code-font";
 
 export function FormulaSource({ source, colors, displayMode, onClose }: {
@@ -19,16 +19,19 @@ export function FormulaSource({ source, colors, displayMode, onClose }: {
     flexShrink: 1, userSelect: "text",
   } as const;
   const toolbarStyle = {
-    flexDirection: "row", justifyContent: "flex-end", gap: 12, userSelect: "none",
+    flexDirection: "row", flexWrap: "wrap", justifyContent: "flex-end", gap: 4, userSelect: "none",
   } as const;
+  const actionStyle = { minHeight: 44, minWidth: 44, paddingHorizontal: 12,
+    justifyContent: "center", alignItems: "center" } as const;
   return (
     <View testID="formula-source" style={frameStyle}>
       <View style={toolbarStyle}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Show formula"
+        <Pressable style={actionStyle} accessibilityRole="button" accessibilityLabel="Show formula"
           onPress={(event) => { event.stopPropagation(); onClose(); }}>
           <Text selectable={false} style={{ color: colors.foregroundMuted, fontSize: 12, userSelect: "none" }}>Show formula</Text>
         </Pressable>
         <Pressable
+          style={actionStyle}
           accessibilityRole="button"
           accessibilityLabel="Copy formula source"
           onPress={async (event) => {
@@ -48,7 +51,8 @@ export function FormulaSource({ source, colors, displayMode, onClose }: {
         accessibilityLabel="TeX source"
         selectable
         style={{ color: colors.foreground, fontFamily: CODE_FONT_FAMILY, fontSize: 14,
-          lineHeight: 21, userSelect: "text" }}
+          lineHeight: 21, userSelect: "text",
+          ...(Platform.OS === "web" ? { overflowWrap: "anywhere" as const } : {}) }}
       >
         {source}
       </Text>

@@ -39,7 +39,7 @@ window.toggleQuote = (enabled) => { stopQuote?.(); stopQuote = enabled ? install
 window.toggleQuote(true);
 const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 function Fixture() {
-  const [state, set] = useState({ text: "Known $x^2$ value", key: 0, light: false, mounted: true });
+  const [state, set] = useState({ text: "Known $x^2$ value", key: 0, light: false, mounted: true, compact: false });
   window.setMessage = (changes) => set((previous) => ({ ...previous, ...changes }));
   useEffect(() => { document.body.style.background = state.light ? "#fff" : "#111"; }, [state.light]);
   return <div data-testid="workspace-pane-main" style={{ maxWidth: 850, margin: "80px auto 0" }}>
@@ -47,7 +47,7 @@ function Fixture() {
     <div data-testid="agent-chat-scroll">
       <div id="native-user" style={{ display: "flex", justifyContent: "flex-end" }}><div>Native user $x$</div></div>
       <div id="message" data-source={state.text} key={state.key}>{state.mounted && <RatexMessage agentId="agent" item={{ id: "message", data: { text: state.text } }}
-        theme={{ colors: state.light ? { ...colors, foreground: "#111", foregroundMuted: "#555" } : colors }} layout={{ compact: false, platform: "web" }} />}</div>
+        theme={{ colors: state.light ? { ...colors, foreground: "#111", foregroundMuted: "#555" } : colors }} layout={{ compact: state.compact, platform: "web" }} />}</div>
       <div id="other-message">Other message</div>
     </div>
     <textarea data-composer-input style={{ width: "95%", height: 90, marginTop: 24 }} />

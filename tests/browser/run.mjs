@@ -173,8 +173,8 @@ try {
     // Actual double-click coordinates must hit the formula even though its bitmap is
     // excluded from selection. Exercise inline and display formulas independently.
     for (const [index, source] of [[2, "\\(b^2\\)"], [3, "$$\nc^2 = a^2 + b^2\n$$"]]) {
-      const canvases = await page.$$("canvas");
-      await canvases[index].click({ count: 2 });
+      const hosts = await page.$$(`[aria-label="View formula source"]`);
+      await hosts[index].click({ count: 2 });
       await page.waitForSelector('#root [data-testid="formula-source"]', { timeout: 5000 });
       assert.equal(await page.$('dialog'), null, "source must be shown in place, without a dialog");
       assert.equal(await page.$eval('#root', (node) => node.querySelectorAll('canvas').length), 7);
@@ -237,7 +237,7 @@ try {
     await page.evaluate(() => window.setFixture({ compact: true }));
     await page.waitForFunction(() => document.querySelectorAll("canvas").length === 8);
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= 390), true, "compact fixture must not overflow");
-    const compactFormulas = await page.$$('canvas');
+    const compactFormulas = await page.$$('[aria-label="View formula source"]');
     await compactFormulas[2].click({ count: 2 });
     await page.waitForSelector('[data-testid="formula-source"]');
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= 390), true, "compact source box must not overflow");
