@@ -1,7 +1,6 @@
 import { createElement, useEffect, useRef } from "react";
 import { Platform, Text, View } from "react-native";
-import { renderToCanvas } from "../node_modules/ratex-wasm/dist/renderer.js";
-import { formulaDepth, formulaLayout } from "../shared/layout";
+import { drawFormula } from "./canvas";
 import { RATEX_WASM_VERSION, type DisplayList } from "../shared/ratex";
 import { FONT_CSS, FONT_DECLARATIONS } from "./vendor/fonts";
 
@@ -13,7 +12,11 @@ declare const document: {
   /** FontFaceSet, absent on older engines. */
   fonts?: { load(font: string): Promise<unknown> };
 };
-declare const window: { devicePixelRatio?: number };
+declare const window: {
+  devicePixelRatio?: number;
+  addEventListener(type: "resize", listener: () => void): void;
+  removeEventListener(type: "resize", listener: () => void): void;
+};
 
 type WebCanvas = {
   width: number;
@@ -25,6 +28,7 @@ type WebCanvas = {
     maxWidth: string;
     pointerEvents: string;
     userSelect: string;
+    verticalAlign: string;
   };
   getContext(contextId: "2d"): unknown;
   setAttribute(name: string, value: string): void;
@@ -151,23 +155,18 @@ export function FormulaCanvas({
         return;
       }
       const dpr = window.devicePixelRatio && window.devicePixelRatio > 0 ? window.devicePixelRatio : 1;
-      const parentWidth = node.parentElement?.clientWidth || node.clientWidth || 0;
-      const depth = formulaDepth(displayList);
-      const next = `${parentWidth}|${dpr}|${fontSize}|${padding}|${displayList.width}|${displayList.height}|${depth}`;
+      // Formula pixels do not depend on viewport width: the containing block scrolls.
+      // Avoid replacing a selected canvas merely because the transcript was resized.
+      const next = `${dpr}|${fontSize}|${padding}`;
       if (next === signature) return;
       signature = next;
-      const layout = formulaLayout(displayList, fontSize, padding, parentWidth, dpr);
       const canvas = document.createElement("canvas");
-      // renderToCanvas reads height + depth with no default: an absent depth would size
-      // the backing store to NaN, i.e. a blank canvas.
-      renderToCanvas({ ...displayList, depth } as never, canvas as never, {
-        fontSize: fontSize * dpr,
-        padding: padding * dpr,
-        backgroundColor,
-      });
+      const layout = drawFormula(displayList, canvas as unknown as HTMLCanvasElement,
+        fontSize * dpr, padding * dpr, backgroundColor);
       canvas.style.display = inline ? "inline-block" : "block";
-      canvas.style.width = `${layout.displayWidth}px`;
-      canvas.style.height = `${layout.displayHeight}px`;
+      canvas.style.width = `${layout.width / dpr}px`;
+      canvas.style.height = `${layout.height / dpr}px`;
+      canvas.style.verticalAlign = `${-(layout.height - layout.baseline) / dpr}px`;
       canvas.style.pointerEvents = onShowSource ? "auto" : "none";
       canvas.style.userSelect = "none";
       // The TeX source next to it is the accessible (and copyable) representation.
@@ -188,9 +187,11 @@ export function FormulaCanvas({
     const observer = new ResizeObserver(draw);
     observer.observe(host);
     if (host.parentElement) observer.observe(host.parentElement);
+    window.addEventListener("resize", draw);
     return () => {
       disposed = true;
       observer.disconnect();
+      window.removeEventListener("resize", draw);
     };
   }, [backgroundColor, displayList, fontSize, inline, padding, onShowSource]);
 
@@ -211,9 +212,8 @@ export function FormulaCanvas({
       ref: hostRef,
       collapsable: false,
       style: {
-        maxWidth: "100%",
-        flexShrink: 1,
-        alignSelf: "center",
+        flexShrink: 0,
+        alignSelf: "flex-start",
         pointerEvents: "auto",
         cursor: onShowSource ? "pointer" : "auto",
       },

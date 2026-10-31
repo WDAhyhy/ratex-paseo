@@ -6,7 +6,7 @@ Render LaTeX formulas directly in Paseo conversations, select and copy their ori
 
 ## Features
 
-- Automatically renders formulas in assistant and user messages.
+- Automatically renders formulas in assistant messages; user messages retain Paseo's native right-aligned layout.
 - Supports inline delimiters `$...$` and `\(...\)`, and display delimiters `$$...$$` and `\[...\]`.
 - Preserves the original formula delimiters, whitespace, and line breaks when copying across a formula.
 - Double-click a formula to replace it with a Markdown-style code box. **Copy** is in the upper right; **Show formula** restores the rendered view.
@@ -119,7 +119,7 @@ The scratch pad is available from the **RaTeX** sidebar entry, the **RaTeX formu
 2. The client sends TeX, display mode, and color through a plugin RPC.
 3. `ratex-wasm` parses and lays out the formula in the daemon, returning a DisplayList.
 4. The web client draws that DisplayList using Canvas 2D and embedded KaTeX font files.
-5. Selectable source text preserves copy behavior; opening the code box replaces the canvas with visible source.
+5. A source-positioned Markdown AST maps DOM selection boundaries back to the message; selectable TeX also supports the browser's plain-text fallback. Actual Canvas glyph bounds and formula depth determine bitmap size and baseline.
 
 The server caches render results with both an entry limit and a serialized-size budget. Large results bypass the cache. Formula input is limited to 4096 characters.
 
@@ -127,10 +127,10 @@ The server caches render results with both an entry limit and a serialized-size 
 
 Messages without a complete formula retain Paseo's built-in Markdown renderer. For messages containing formulas, this plugin renders the whole message. It supports headings, emphasis, strikethrough, code spans, fenced and indented code, links, quotes, lists, task lists, pipe tables, and horizontal rules.
 
-- This is a limited Markdown renderer, not a complete CommonMark/GFM implementation.
+- The compatibility renderer uses a CommonMark/GFM AST with source offsets. Images remain labels and URLs; reference-style links and arbitrary HTML are not full host-renderer equivalents.
 - Images are shown as their label and URL, rather than fetched and displayed.
 - Links and code spans that name a local file, such as `client/message.tsx:105`, open it in the workspace like Paseo's own messages (web only). A bare file name in a code span, such as `message.tsx`, stays plain code because plugins cannot use Paseo's file lookup.
-- Copying preserves formula source, but does not reconstruct all original Markdown markers or table separators.
+- Copying a selection within one RaTeX message restores its original Markdown and TeX through a local copy handler, including Quote's synthetic clipboard events. See [compatibility delivery](COMPATIBILITY.md).
 - Native clients display TeX source; Canvas rendering and double-click source inspection are web features.
 - Unsupported formulas fall back to their source.
 

@@ -1,13 +1,12 @@
 import type { PluginTheme } from "@getpaseo/plugin";
 import { openExternalUrl, useAgent, type PluginTimelineItemProps } from "@getpaseo/plugin/client";
 import { useToast } from "@getpaseo/plugin/client/ui";
-import { createContext, useContext, useMemo, type ReactNode } from "react";
-import { Text, View } from "react-native";
+import { createContext, useContext, useEffect, useMemo, useRef, type ReactNode } from "react";
+import { Platform, Text, View } from "react-native";
 import type { z } from "zod";
 import { codeFileTarget, fileLinkTarget, type FileLocation } from "../shared/file-link";
 import { messageTypography } from "../shared/layout";
 import {
-  markdownBlocks,
   type InlineNode,
   type MarkdownBlock,
   type TableAlign,
@@ -16,6 +15,8 @@ import type { ratexMessageSchema } from "../shared/ratex";
 import { CODE_FONT_FAMILY } from "./code-font";
 import { RatexFormula } from "./formula-view";
 import { openWorkspaceFile } from "./open-file";
+import { sourceMarkdown, type SourceDocument } from "../shared/source-markdown";
+import { installMarkdownCopy } from "./selection";
 
 /** Tied to the schema the renderer is registered with, so the two cannot drift. */
 type RatexMessageData = z.infer<typeof ratexMessageSchema>;
@@ -26,6 +27,14 @@ type FileLinks = { cwd: string | null; open(location: FileLocation, node: unknow
 
 /** Cleared inside link text, so code within a link does not become a nested link. */
 const FileLinkContext = createContext<FileLinks | null>(null);
+const SourceContext = createContext<SourceDocument | null>(null);
+
+function SourceLeaf({ node, children, block = false }: { node: object; children: ReactNode; block?: boolean }) {
+  const doc = useContext(SourceContext);
+  const props = { "data-ratex-source": doc?.ids.get(node) };
+  if (Platform.OS !== "web") return <>{children}</>;
+  return block ? <div {...props} style={{ minWidth: 0 }}>{children}</div> : <span {...props}>{children}</span>;
+}
 
 function messageStyles(theme: PluginTheme, compact: boolean, platform: Layout["platform"]) {
   const type = messageTypography(platform);
@@ -34,10 +43,12 @@ function messageStyles(theme: PluginTheme, compact: boolean, platform: Layout["p
     color: theme.colors.foreground,
     fontSize: bodySize,
     lineHeight: type.lineHeight,
+    overflow: "visible" as const,
     userSelect: "text" as const,
   };
   return {
     column: {
+      minWidth: 0,
       gap: compact ? 8 : 10,
       userSelect: "text" as const,
     },
@@ -137,7 +148,14 @@ export function RatexMessage({
   theme,
   layout,
 }: PluginTimelineItemProps<RatexMessageData>) {
-  const blocks = useMemo(() => markdownBlocks(item.data.text), [item.data.text]);
+  const document = useMemo(() => sourceMarkdown(item.data.text), [item.data.text]);
+  const blocks = document.blocks;
+  const root = useRef<View>(null);
+  useEffect(() => {
+    if (Platform.OS !== "web" || layout.platform !== "web") return;
+    const node: unknown = root.current;
+    if (node instanceof HTMLElement) return installMarkdownCopy(node, document);
+  }, [document, layout.platform]);
   const { compact, platform } = layout;
   const styles = useMemo(
     () => messageStyles(theme, compact, platform),
@@ -160,7 +178,8 @@ export function RatexMessage({
 
   return (
     <FileLinkContext.Provider value={fileLinks}>
-      <View style={styles.column}>
+      <SourceContext.Provider value={document}>
+      <View ref={root} collapsable={false} style={styles.column}>
         {blocks.map((block, index) => (
           <MarkdownBlockView
             key={index}
@@ -171,6 +190,7 @@ export function RatexMessage({
           />
         ))}
       </View>
+      </SourceContext.Provider>
     </FileLinkContext.Provider>
   );
 }
@@ -202,9 +222,9 @@ function MarkdownBlockView({
     case "list-item":
       return (
         <View style={[styles.list, { marginLeft: block.indent * 16 }]}>
-          <Text selectable style={styles.marker}>
+          <SourceLeaf node={block}><Text selectable style={styles.marker}>
             {block.marker}
-          </Text>
+          </Text></SourceLeaf>
           <Text selectable style={[styles.paragraph, { flex: 1 }]}>
             {renderInlines(block.inlines, theme, layout, styles)}
           </Text>
@@ -228,20 +248,20 @@ function MarkdownBlockView({
       return <TableView block={block} theme={theme} layout={layout} styles={styles} />;
     case "code":
       return (
-        <Text selectable style={styles.code}>
+        <SourceLeaf node={block} block><Text selectable style={styles.code}>
           {block.text}
-        </Text>
+        </Text></SourceLeaf>
       );
     case "display-math":
       return (
-        <RatexFormula
+        <SourceLeaf node={block} block><RatexFormula
           latex={block.latex}
           source={block.source}
           displayMode
           colors={theme.colors}
           platform={layout.platform}
           fontSize={styles.bodySize}
-        />
+        /></SourceLeaf>
       );
     case "hr":
       return <View style={styles.hr} />;
@@ -303,7 +323,7 @@ function renderInlines(
   return nodes.map((node, index) => {
     switch (node.type) {
       case "text":
-        return node.text;
+        return <SourceLeaf key={index} node={node}>{node.text}</SourceLeaf>;
       case "strong":
         return (
           <Text key={index} selectable style={styles.strong}>
@@ -326,10 +346,10 @@ function renderInlines(
         // Images are not fetched: the label plus its target stays readable and copyable.
         if (node.image) {
           return (
-            <Text key={index} selectable style={styles.imageLabel}>
+            <SourceLeaf key={index} node={node}><Text selectable style={styles.imageLabel}>
               {renderInlines(node.children, theme, layout, styles, fontSize)}
               {` (${node.href})`}
-            </Text>
+            </Text></SourceLeaf>
           );
         }
         return (
@@ -339,26 +359,24 @@ function renderInlines(
         );
       case "code":
         return (
-          <InlineCode
-            key={index}
+          <SourceLeaf key={index} node={node}><InlineCode
             text={node.text}
             style={styles.inlineCode(fontSize)}
             linkStyle={styles.codeLink}
-          />
+          /></SourceLeaf>
         );
       case "math":
         // No wrapping View: react-native-web renders one as an inline-flex box inside the
         // paragraph, and browsers put a line break at such a boundary when copying.
         return (
-          <RatexFormula
-            key={index}
+          <SourceLeaf key={index} node={node}><RatexFormula
             latex={node.latex}
             source={node.source}
             displayMode={false}
             colors={theme.colors}
             platform={layout.platform}
             fontSize={fontSize}
-          />
+          /></SourceLeaf>
         );
     }
   });

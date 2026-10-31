@@ -136,7 +136,7 @@ try {
       const style = document.createElement("style");
       style.textContent = ":is(#root) *:not([data-pmono]):not([data-pmono] *){font-family:serif;}";
       document.head.appendChild(style);
-      const span = [...document.querySelectorAll("#root span")].find((node) => node.textContent === "npm test");
+      const span = [...document.querySelectorAll("#root span")].findLast((node) => node.textContent === "npm test");
       const { fontFamily, fontSize, paddingLeft, borderTopLeftRadius } = getComputedStyle(span);
       style.remove();
       return { fontFamily, fontSize, paddingLeft, borderTopLeftRadius };

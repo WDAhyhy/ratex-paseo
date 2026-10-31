@@ -16,6 +16,11 @@ for (const path of [
   "LICENSE", "client/vendor/FONT-LICENSE.txt", "README.md", "README.zh-CN.md",
   "node_modules/ratex-wasm/pkg/ratex_wasm.js",
   "node_modules/ratex-wasm/dist/renderer.js",
+  "client/canvas.ts", "client/selection.ts", "shared/source-markdown.ts", "COMPATIBILITY.md",
+  "node_modules/mdast-util-from-markdown/index.js",
+  "node_modules/mdast-util-gfm/index.js",
+  "node_modules/micromark-extension-gfm/index.js",
+  "node_modules/micromark-util-decode-string/index.js",
 ]) assert.ok(paths.has(path), `Missing published file: ${path}`);
 for (const path of paths) {
   assert.ok(!/^(tests\/|\.github\/|\.env(?:\.|$)|\.npmrc$|package-lock\.json$)/.test(path),

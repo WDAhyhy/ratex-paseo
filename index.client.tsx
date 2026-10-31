@@ -27,11 +27,8 @@ export default function contribute(client: PluginClientContext) {
     query: { itemType: "assistant_message" },
     transform: transformMath,
   });
-  client.addTimelineTransformer({
-    id: "ratex-user-math",
-    query: { itemType: "user_message" },
-    transform: transformMath,
-  });
+  // Plugin items lose the host user-message bubble; preserve Paseo's native renderer.
+  // User math remains source until the SDK exposes an in-bubble rendering hook.
   client.addTimelineRenderer({
     kind: "ratex-message",
     version: 1,

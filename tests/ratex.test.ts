@@ -135,8 +135,11 @@ test("plugin manifest and client entry register a RaTeX UI", async () => {
 
   const web = await readSource("../client/web.ts");
   assert.match(web, /Platform\.OS === "web"/);
-  assert.match(web, /renderToCanvas/);
-  assert.match(web, /ratex-wasm\/dist\/renderer\.js/);
+  assert.match(web, /drawFormula/);
+  const canvas = await readSource("../client/canvas.ts");
+  assert.match(canvas, /renderToCanvas/);
+  assert.match(canvas, /ratex-wasm\/dist\/renderer\.js/);
+  assert.doesNotMatch(client, /itemType: "user_message"/);
 });
 
 test("theme colors RaTeX cannot parse are normalized instead of failing the render", async () => {

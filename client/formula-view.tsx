@@ -60,8 +60,10 @@ export function RatexFormula({
     () => ({
       fallback: { color: colors.foregroundMuted, fontFamily: CODE_FONT_FAMILY, fontSize },
       wrap: {
-        alignItems: "center" as const,
+        alignItems: "flex-start" as const,
         alignSelf: "stretch" as const,
+        minWidth: 0,
+        overflow: "scroll" as const,
         paddingVertical: 8,
         width: "100%" as const,
         maxWidth: "100%" as const,
