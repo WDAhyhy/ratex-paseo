@@ -197,6 +197,63 @@ try {
   assert.equal(await page.$eval('[data-composer-input]', input => input.value), dragged.split('\n').map(line=>line ? `> ${line}` : '>').join('\n')+'\n\n');
   results.push('real-mouse-mixed-quote');
 
+  // One unrelated slow face must not keep already-loaded math in stale bitmaps.
+  // Use real delayed font responses, not a mocked renderer or font metrics.
+  const cold = await browser.newPage();
+  let releaseFaces, releaseSlowFace;
+  const faces = new Promise(resolve => { releaseFaces = resolve; });
+  const slowFace = new Promise(resolve => { releaseSlowFace = resolve; });
+  let requestedFaces = 0;
+  await cold.setRequestInterception(true);
+  cold.on('request', async request => {
+    if (!request.url().startsWith('http://ratex-font.test/')) return request.continue();
+    const index = requestedFaces++;
+    await faces;
+    if (index === 0) await slowFace;
+    await request.respond({ status: 200, contentType: 'font/woff2',
+      headers: { 'Access-Control-Allow-Origin': '*' },
+      body: Buffer.from(new URL(request.url()).searchParams.get('data'), 'base64') });
+  });
+  await cold.evaluateOnNewDocument(() => {
+    const append = Node.prototype.appendChild;
+    Node.prototype.appendChild = function(child) {
+      if (child.tagName === 'STYLE' && child.id?.startsWith('ratex-formula-katex-fonts-')) {
+        child.textContent = child.textContent.replace(/data:font\/woff2;base64,([A-Za-z0-9+/=]+)/g,
+          (_, data) => `http://ratex-font.test/face.woff2?data=${encodeURIComponent(data)}`);
+      }
+      return append.call(this, child);
+    };
+  });
+  try {
+    await cold.setViewport({ width: 900, height: 450, deviceScaleFactor: 1 });
+    await cold.goto(origin, { waitUntil: 'domcontentloaded' });
+    await cold.waitForFunction(() => window.setMessage);
+    await cold.evaluate(() => window.setMessage({
+      text: String.raw`活动集 $\mathcal{A}(x)$ 是分到了任务的站点的集合。“恰好是 $Q$”指： $x^2+\sum_i^n a_i$`,
+    }));
+    await cold.waitForFunction(() => document.querySelectorAll('#message canvas').length === 3);
+    releaseFaces();
+    await cold.waitForFunction(() => [...document.fonts].filter(face => face.status === 'loaded').length === 19);
+    await cold.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    const bitmaps = () => cold.$$eval('#message canvas', canvases => canvases.map(canvas => canvas.toDataURL()));
+    const initial = await bitmaps();
+    await cold.screenshot({ path: path.join(evidence, 'inline-partial-fonts.png') });
+    for (let index = 0; index < 3; index++) {
+      await (await cold.$$('#message [aria-label="View formula source"]'))[index].click({ count: 2 });
+      await cold.waitForSelector('[aria-label="Show formula"]');
+      await cold.click('[aria-label="Show formula"]');
+      await cold.waitForFunction(() => document.querySelectorAll('#message canvas').length === 3);
+      await cold.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      assert.ok((await bitmaps()).every((bitmap, i) => bitmap === initial[i]),
+        `formula ${index}: source toggle must not be needed to refresh loaded fonts`);
+    }
+    results.push('partial-font-readiness-without-source-toggle');
+  } finally {
+    releaseFaces(); releaseSlowFace();
+    await cold.evaluate(async () => document.fonts.ready);
+    await cold.close();
+  }
+
   // Exact listener accounting on detached roots proves cleanup on session changes.
   const cleanup = await page.evaluate(async () => {
     const oldRoot = document.querySelector('#message').firstChild;

@@ -1,6 +1,6 @@
 # RaTeX / Quote 兼容增强版
 
-版本：`ratex-math-render@0.1.8-quote.1`。本地分支：`compat/quote-selection`。未发布 npm / GitHub，未改动现有 Paseo 安装或用户数据。
+版本：`ratex-math-render@0.1.8-quote.2`。分支：`compat/quote-selection`。源码和安装包发布于 https://github.com/WDAhyhy/ratex-paseo ，未发布 npm。
 
 ## 固定源码与宿主合同
 
@@ -28,7 +28,8 @@ Quote `client/web.ts` 的实际链路：`pointerup -> setTimeout(sync,0) -> read
 - WASM height / depth 描述排版尺寸；Canvas fillText 实际字体墨迹可能超出 advance/layout box。复用原 renderer 的字体选择及排版指令做 measureText，按真实 boundingBox 调整必要尺寸和原点，仍由原 WASM/renderer 绘制。没有给生产画布加巨大 padding。
 - 行内 Canvas 依据 `height + depth` 和实际补偿计算基线，不把画布底边当作文字基线。普通段落明确允许可见 overflow；高分数由真实行盒撑开，不和上下文重叠。
 - 块公式使用原始字号和完整逻辑/设备像素尺寸；容器横向滚动，不再把长公式缩到很小。flex minWidth=0，Canvas 不收缩。
-- 字体加载完成后重新测量；ResizeObserver/窗口 resize 处理 DPR，单纯宽度改变不替换 Canvas，以免干扰选区。所有组件监听均清理。
+- 首次绘制记录 renderer 实际使用的字体声明，在该公式使用的每种精确字体/字号分别就绪时重测并重绘（同帧合并）；不再等待全部 20 种字体，以免一个无关字体延迟使其他公式长期保留旧位图。浏览器回归拦截真实字体请求，放行 19 种、暂缓 1 种，确认源码切换前后位图完全一致。
+- ResizeObserver/窗口 resize 处理 DPR，单纯宽度改变不替换 Canvas，以免干扰选区。所有组件监听及异步重绘均在卸载时清理。
 - 浏览器校验墨迹边缘不是透明截断；六类复杂公式的墨迹宽高与宽裕参考画布完全一致；另检查行内高分数和表格求和的各层 clipping ancestor。
 
 ## 验证命令
@@ -53,7 +54,7 @@ npm run test:browser
 QUOTE_SOURCE="$(realpath ../quote)" npm run test:quote
 ```
 
-`test:quote` 加载生产 RaTeX 组件、React Native Web、真实服务端 WASM 和未改动 Quote。含真实鼠标拖选点击、合成 copy 数据严格比较、最终 composer 文本、Reply/Add/Send、Side Chat API payload、纯公式部分选区、反向选区、跨段落、GFM、不同消息不拦截、反复卸载、独立工作、复杂公式主题/DPR/窄屏和截图。测试证据由 `RATEX_EVIDENCE` 指定，默认仓库同级 evidence。支持 `RATEX_CLIENT_BUNDLE=/absolute/path/clientBundle.js` 与 `RATEX_RENDER_SERVER=file:///absolute/path/server-adapter.mjs` 加载官方编译后的实际 client/server bundle；交付包的该路径也已跑过全部 20 组测试。用户气泡位置的浏览器断言使用按宿主容器合同搭建的 fixture，结合真实注册结果验证用户 Transformer 未注册，并非完整宿主截图。
+`test:quote` 加载生产 RaTeX 组件、React Native Web、真实服务端 WASM 和未改动 Quote。含真实鼠标拖选点击、合成 copy 数据严格比较、最终 composer 文本、Reply/Add/Send、Side Chat API payload、纯公式部分选区、反向选区、跨段落、GFM、不同消息不拦截、反复卸载、独立工作、复杂公式主题/DPR/窄屏和截图。测试证据由 `RATEX_EVIDENCE` 指定，默认仓库同级 evidence。支持 `RATEX_CLIENT_BUNDLE=/absolute/path/clientBundle.js` 与 `RATEX_RENDER_SERVER=file:///absolute/path/server-adapter.mjs` 加载官方编译后的实际 client/server bundle；交付包的该路径也已跑过全部 21 组测试。用户气泡位置的浏览器断言使用按宿主容器合同搭建的 fixture，结合真实注册结果验证用户 Transformer 未注册，并非完整宿主截图。
 
 `npm audit --omit=dev` 检查结果为 0 个生产依赖漏洞。完整 `npm ci` 报告 14 个开发依赖链漏洞（12 moderate / 1 high / 1 critical，来自上游工具链）；未擅自进行可能破坏 SDK 兼容性的全量依赖升级。生产安装包只捆绑运行时依赖。
 

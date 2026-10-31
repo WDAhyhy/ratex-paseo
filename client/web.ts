@@ -16,6 +16,8 @@ declare const window: {
   devicePixelRatio?: number;
   addEventListener(type: "resize", listener: () => void): void;
   removeEventListener(type: "resize", listener: () => void): void;
+  requestAnimationFrame(callback: () => void): number;
+  cancelAnimationFrame(handle: number): void;
 };
 
 type WebCanvas = {
@@ -143,9 +145,10 @@ export function FormulaCanvas({
     if (Platform.OS !== "web") return;
     const host = resolveHost(hostRef.current);
     if (!host) return;
-    const ready = ensureKatexFonts();
+    void ensureKatexFonts();
 
     let signature = "";
+    let usedFonts: string[] = [];
     const draw = () => {
       const node = resolveHost(hostRef.current);
       if (!node) return;
@@ -163,6 +166,7 @@ export function FormulaCanvas({
       const canvas = document.createElement("canvas");
       const layout = drawFormula(displayList, canvas as unknown as HTMLCanvasElement,
         fontSize * dpr, padding * dpr, backgroundColor);
+      usedFonts = layout.fonts;
       canvas.style.display = inline ? "inline-block" : "block";
       canvas.style.width = `${layout.width / dpr}px`;
       canvas.style.height = `${layout.height / dpr}px`;
@@ -176,20 +180,30 @@ export function FormulaCanvas({
     };
 
     draw();
-    // Glyphs are painted with the KaTeX webfonts; until they load the browser
-    // substitutes a fallback face, so repaint once they are ready.
+    // Canvas never updates its pixels when a font finishes loading. Repaint as
+    // each face/size used by this formula settles; an unrelated slow face (or a
+    // different face in the same formula) must not hold already-loaded glyphs back.
     let disposed = false;
-    void ready.then(() => {
-      if (disposed) return;
-      signature = "";
-      draw();
-    });
+    let fontFrame: number | undefined;
+    const fontSettled = () => {
+      if (disposed || fontFrame !== undefined) return;
+      fontFrame = window.requestAnimationFrame(() => {
+        fontFrame = undefined;
+        if (disposed) return;
+        signature = "";
+        draw();
+      });
+    };
+    for (const font of usedFonts) {
+      void document.fonts?.load(font).then(fontSettled, fontSettled);
+    }
     const observer = new ResizeObserver(draw);
     observer.observe(host);
     if (host.parentElement) observer.observe(host.parentElement);
     window.addEventListener("resize", draw);
     return () => {
       disposed = true;
+      if (fontFrame !== undefined) window.cancelAnimationFrame(fontFrame);
       observer.disconnect();
       window.removeEventListener("resize", draw);
     };

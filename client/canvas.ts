@@ -20,6 +20,7 @@ export function drawFormula(list: DisplayList, canvas: HTMLCanvasElement, fontSi
   let top = 0;
   let right = list.width * fontSize;
   let bottom = (list.height + formulaDepth(list)) * fontSize;
+  const fonts = new Set<string>();
   const measured = new Proxy(context, {
     get(target, property) {
       if (property === "fillText") return (text: string, x: number, y: number) => {
@@ -32,7 +33,10 @@ export function drawFormula(list: DisplayList, canvas: HTMLCanvasElement, fontSi
       const value: unknown = Reflect.get(target, property, target);
       return typeof value === "function" ? value.bind(target) : value;
     },
-    set(target, property, value: unknown) { return Reflect.set(target, property, value, target); },
+    set(target, property, value: unknown) {
+      if (property === "font") fonts.add(String(value));
+      return Reflect.set(target, property, value, target);
+    },
   });
   const measuringCanvas = { set width(value: number) { canvas.width = value; }, set height(value: number) { canvas.height = value; },
     getContext: () => measured };
@@ -47,5 +51,5 @@ export function drawFormula(list: DisplayList, canvas: HTMLCanvasElement, fontSi
       ...(typeof item.y === "number" ? { y: item.y + y / fontSize } : {}),
     })) };
   paint(adjusted, canvas, { fontSize, padding, backgroundColor });
-  return { width: canvas.width, height: canvas.height, baseline: padding + list.height * fontSize + y };
+  return { width: canvas.width, height: canvas.height, baseline: padding + list.height * fontSize + y, fonts: [...fonts] };
 }
