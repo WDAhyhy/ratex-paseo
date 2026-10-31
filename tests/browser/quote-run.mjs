@@ -275,11 +275,16 @@ try {
     String.raw`\begin{bmatrix}a&b\\c&d\end{bmatrix}`, Array.from({length:65},(_,i)=>`x_{${i}}`).join('+')];
   for (const dpr of [1, 1.25, 2]) {
     await page.setViewport({ width: dpr === 1 ? 1100 : 390, height: 1100, deviceScaleFactor: dpr });
+    await page.waitForFunction(dpr => window.devicePixelRatio === dpr, {}, dpr);
     for (const light of [false, true]) {
       await page.evaluate((light) => window.setMessage({ light }), light);
       await full(formulas.map((latex) => `$$${latex}$$`).join('\n\n'));
       await page.waitForFunction((n) => document.querySelectorAll('#message canvas').length === n, {}, formulas.length);
       await page.evaluate(async () => document.fonts.ready);
+      // ResizeObserver and font completion can schedule the repaint after the RPC
+      // resolves. Observe the resulting DPR-sized bitmap, not merely canvas count.
+      await page.waitForFunction(() => [...document.querySelectorAll('#message canvas')].every(canvas =>
+        Math.abs(canvas.getBoundingClientRect().width * window.devicePixelRatio - canvas.width) < 1));
       const ink = await page.$$eval('#message canvas', (canvases) => canvases.map((canvas) => {
         const {width,height}=canvas; const data=canvas.getContext('2d').getImageData(0,0,width,height).data;
         let minX=width,minY=height,maxX=-1,maxY=-1;
