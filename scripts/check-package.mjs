@@ -16,6 +16,8 @@ for (const path of [
   "LICENSE", "client/vendor/FONT-LICENSE.txt", "README.md", "README.zh-CN.md",
   "node_modules/ratex-wasm/pkg/ratex_wasm.js",
   "node_modules/ratex-wasm/dist/renderer.js",
+  "server/native-render.ts", "server/vendor/native-fonts.ts", "client/native-formula.tsx",
+  "scripts/embed-native-fonts.mjs", "node_modules/pureimage/dist/index.js", "node_modules/opentype.js/dist/opentype.js",
   "client/canvas.ts", "client/selection.ts", "shared/source-markdown.ts", "COMPATIBILITY.md",
   "node_modules/mdast-util-from-markdown/index.js",
   "node_modules/mdast-util-gfm/index.js",

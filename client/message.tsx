@@ -14,6 +14,7 @@ import {
 import type { ratexMessageSchema } from "../shared/ratex";
 import { CODE_FONT_FAMILY } from "./code-font";
 import { RatexFormula } from "./formula-view";
+import { FormulaText } from "./native-formula";
 import { openWorkspaceFile } from "./open-file";
 import { sourceMarkdown, type SourceDocument } from "../shared/source-markdown";
 import { installMarkdownCopy } from "./selection";
@@ -210,15 +211,15 @@ function MarkdownBlockView({
   switch (block.type) {
     case "heading":
       return (
-        <Text selectable style={styles.heading(block.level)}>
+        <FormulaText selectable style={styles.heading(block.level)}>
           {renderInlines(block.inlines, theme, layout, styles, styles.headingSize(block.level))}
-        </Text>
+        </FormulaText>
       );
     case "paragraph":
       return (
-        <Text selectable style={styles.paragraph}>
+        <FormulaText selectable style={styles.paragraph}>
           {renderInlines(block.inlines, theme, layout, styles)}
-        </Text>
+        </FormulaText>
       );
     case "list-item":
       return (
@@ -226,9 +227,9 @@ function MarkdownBlockView({
           <SourceLeaf node={block}><Text selectable style={styles.marker}>
             {block.marker}
           </Text></SourceLeaf>
-          <Text selectable style={[styles.paragraph, { flex: 1 }]}>
+          <FormulaText selectable style={[styles.paragraph, { flex: 1 }]}>
             {renderInlines(block.inlines, theme, layout, styles)}
-          </Text>
+          </FormulaText>
         </View>
       );
     case "quote":
@@ -293,7 +294,7 @@ function TableView({
         >
           {cells.map((cell, cellIndex) => (
             <View key={cellIndex} style={styles.tableCell}>
-              <Text
+              <FormulaText
                 selectable
                 style={[
                   rowIndex === 0 ? styles.tableHeadText : styles.paragraph,
@@ -301,7 +302,7 @@ function TableView({
                 ]}
               >
                 {renderInlines(cell, theme, layout, styles)}
-              </Text>
+              </FormulaText>
             </View>
           ))}
         </View>

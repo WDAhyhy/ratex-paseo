@@ -5,6 +5,7 @@ import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { renderLatex } from "../../server/render.ts";
+import { renderNativeFormula } from "../../server/native-render.ts";
 
 // Browser tools can live in a scratch install instead of the plugin's production bundle.
 const root = fileURLToPath(new URL("../../", import.meta.url));
@@ -30,8 +31,8 @@ const bundle = await build({
       : { path: name, namespace: "host" });
     builder.onLoad({ filter: /.*/, namespace: "host" }, ({ path }) => ({
       contents: path.endsWith("/client")
-        ? `export const useRpc = () => async (input) => {
-            const response = await fetch('/render', {method:'POST',body:JSON.stringify(input)});
+        ? `export const useRpc = (rpc) => async (input) => {
+            const response = await fetch(rpc.name === 'ratex.render-native' ? '/render-native' : '/render', {method:'POST',body:JSON.stringify(input)});
             return response.json();
           }; export const openExternalUrl = async (url) => { window.lastOpenedUrl = url; };
           export const useAgent = (agentId, select) => select({ id: agentId, cwd: "/repo" });`
@@ -47,13 +48,13 @@ const html = `<!doctype html><html><head><meta charset="utf-8">
 <script src="/bundle.js"></script></body></html>`;
 const server = createServer(async (req, res) => {
   try {
-    if (req.url === "/render") {
+    if (req.url === "/render" || req.url === "/render-native") {
       let raw = "";
       for await (const chunk of req) raw += chunk;
       const input = JSON.parse(raw);
       rpcRequests.push(input);
       if (rpcDelay) await new Promise((resolve) => setTimeout(resolve, rpcDelay));
-      const result = await renderLatex(input);
+      const result = await (req.url === "/render-native" ? renderNativeFormula(input) : renderLatex(input));
       res.setHeader("Content-Type", "application/json");
       res.end(JSON.stringify(result));
     } else if (req.url === "/bundle.js") {
@@ -230,7 +231,9 @@ try {
     const count = rpcRequests.length;
     await page.evaluate(() => window.setFixture({ text: "Native $n_{native}$", platform: "ios" }));
     await page.waitForFunction(() => document.getElementById("root").innerText.includes("$n_{native}$"));
-    assert.equal(rpcRequests.length, count, "native should not request canvas rendering");
+    await page.waitForSelector('[data-testid="native-formula-image"]');
+    assert.equal(await page.$eval('#root', node => node.querySelectorAll('canvas').length), 0, 'native does not mount Canvas');
+    assert.ok(rpcRequests.length > count, 'native requests PNG rendering');
 
     await page.evaluate(() => window.resetFixture());
     await page.setViewport({ width: 390, height: 1200 });
@@ -243,7 +246,7 @@ try {
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= 390), true, "compact source box must not overflow");
     await page.click('[aria-label="Show formula"]');
     await page.waitForFunction(() => document.querySelectorAll('canvas').length === 8);
-    console.log("chrome: new-source loading, theme continuity, render failure, native RPC suppression and compact layout passed");
+    console.log("chrome: new-source loading, theme continuity, render failure, native PNG rendering and compact layout passed");
   }
   assert.deepEqual(external, [], "fonts must not request a CDN");
   assert.deepEqual(errors, [], "no browser or RPC errors");

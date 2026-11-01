@@ -1,6 +1,6 @@
 # RaTeX / Quote 兼容增强版
 
-版本：`ratex-math-render@0.1.8-quote.3`。分支：`compat/quote-selection`。源码和安装包发布于 https://github.com/WDAhyhy/ratex-paseo ，未发布 npm。
+版本：`ratex-math-render@0.1.8-quote.4`。分支：`compat/quote-selection`。源码和安装包发布于 https://github.com/WDAhyhy/ratex-paseo ，未发布 npm。
 
 ## 固定源码与宿主合同
 
@@ -30,6 +30,7 @@ Quote `client/web.ts` 的实际链路：`pointerup -> setTimeout(sync,0) -> read
 - 块公式使用原始字号和完整逻辑/设备像素尺寸；容器横向滚动，不再把长公式缩到很小。flex minWidth=0，Canvas 不收缩。
 - 首次绘制记录 renderer 实际使用的字体声明，在该公式使用的每种精确字体/字号分别就绪时重测并重绘（同帧合并）；不再等待全部 20 种字体，以免一个无关字体延迟使其他公式长期保留旧位图。浏览器回归拦截真实字体请求，放行 19 种、暂缓 1 种，确认源码切换前后位图完全一致。
 - ResizeObserver/窗口 resize 处理 DPR，单纯宽度改变不替换 Canvas，以免干扰选区。所有组件监听及异步重绘均在卸载时清理。
+- 行内横向滚动容器按实际 `offsetHeight - clientHeight` 为传统滚动条额外留出高度，并同步调整基线；窗口宽度变化只重新测量滚动条，不替换选中的 Canvas。测试必须检查 `clientHeight` 能否容纳完整位图，不能只比较外层 bounding rect。
 - 浏览器校验墨迹边缘不是透明截断；六类复杂公式的墨迹宽高与宽裕参考画布完全一致；另检查行内高分数和表格求和的各层 clipping ancestor。
 
 ## 手机浏览器 / PWA
@@ -38,7 +39,16 @@ Quote `client/web.ts` 的实际链路：`pointerup -> setTimeout(sync,0) -> read
 - 触屏短按公式打开源码；移动超过 10 CSS px、超过 400 ms、pointercancel 或已有文字选区时不打开，避免抢占滑动和长按选字。
 - 源码按钮点击区域至少 44×44 CSS px，工具栏可换行，长 TeX 在源码视图中折行；桌面双击和键盘 Enter/Space 保留。
 - 测试包含 Chromium 触屏模式的 360/390/430 px 竖屏、800 px 横屏、DPR 2/3、深浅主题，另用真实 WebKit 引擎验证 390/844 px。覆盖点按、Chromium 实际触摸滑动、源码复制、原版 Quote 引用和纵向裁切检查。
-- WebKit 是 Linux 浏览器引擎测试，不等同 iPhone Safari 真机；手机系统原生选区手柄未自动化。Android/iOS 原生 Paseo App 不具备该 Canvas 路径，仍显示可选择源码，不能据此声称原生 App 已支持公式渲染。
+- WebKit 是 Linux 浏览器引擎测试，不等同 iPhone Safari 真机；手机系统原生选区手柄未自动化。原生 Paseo App 不使用浏览器 Canvas；其独立实现和验收见下节。
+
+## Android 原生 App
+
+- 原生端调用独立 `ratex.render-native` RPC：服务端使用相同 WASM 排版、固定 KaTeX 字体轮廓生成透明 PNG，React Native `Image` 显示；不依赖 DOM、WebView、手机字体或额外原生库。
+- 实际 glyph ink bounds 决定尺寸，支持 2–4 倍密度；块公式保持自然字号、局部水平滚动。超长行内公式转为独占一行的局部滚动区域，按真实段落/表格单元格宽度限制，不撑宽整页。
+- 轻点公式使用 Paseo 官方源码面板，支持复制和返回；宿主将面板移出 Android Text 子树，避免表格行内公式的弹窗出现负高度。
+- 服务端只绘制公式，不执行 TeX 外部命令或读取远程字体；位图尺寸、字符数与内存缓存均有界。不支持的字形或渲染失败显示可选择原始 TeX。
+- 原版 Quote 未修改；原生安卓没有浏览器 `Selection` / 合成 `ClipboardEvent`，不能将 Web 端 Quote 框选功能视为原生已验证功能。
+- 验证环境为官方 Paseo 0.13.2 Android App、Android 30 x86_64 模拟器及实际 daemon；检查了真实聊天的行内/表格公式、源码打开→复制→关闭、深色模式、矩阵/积分及长公式横滑。原生 PNG 单测覆盖透明度、墨迹边缘、复杂公式和错误回退。用户手机仍待实机验收。
 
 ## 验证命令
 
@@ -114,6 +124,6 @@ paseo plugin ls
 - 部分代码 span/代码块选区目前按原子单元恢复完整源码；部分强调/链接选区只保留所选源码，不保证外围标记自动闭合。表格部分选区不补齐未选单元格。完整跨块选区保留原文。
 - 纯公式通过其 selectable TeX 文本选区可引用完整源码。只选中 Canvas 元素但没有任何文本的 Range 时，原版 Quote 的 `selection.toString().trim()` 前置检查会拒绝显示工具栏；RaTeX 不全局篡改 Selection 来绕过它。跨文字拖选正常。
 - 实际鼠标拖选、原版 Quote 工具栏/写入 composer、浏览器原生剪贴板已在 Chromium fixture 验证；Reply/Side Chat 的网络侧是 host API fixture，不是已部署 daemon 的真实 Agent。没有声称已在用户当前 Paseo 安装上验收。
-- 已运行 Chromium 与 Linux WebKit 引擎移动模式；未运行 Firefox、真机 iOS/Android 或 iOS Safari。非 Web 沿用源码退化行为，已有浏览器测试覆盖 native 平台不发 Canvas RPC。Obscura 非必需且未运行。
+- Chromium 与 Linux WebKit 移动模式不等同 Android 原生 App。Android 分支使用独立 PNG RPC，不发 Canvas RPC；Android 模拟器和用户真机验收区分记录。iOS 真机、Firefox 未验收。
 - 新 Markdown AST 支持常用 GFM，但不是 Paseo 完整渲染器的完全替代。图片仍为标签和 URL，HTML 作为安全文本，不支持完整 reference-link 宿主交互；文件链接和代码位置跳转保留。
 - 公式引擎仍为固定 ratex-wasm 0.1.14，单公式 4096 字符上限、原缓存及错误源码回退不变。超长行内公式不强行断开 TeX；推荐模型输出块级公式。字体默认尺寸与上游相同，不读取 Paseo Appearance 自定义字号。

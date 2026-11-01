@@ -39,7 +39,7 @@ const bundle = await build({ entryPoints: [path.join(root, "tests/browser/quote-
     builder.onResolve({ filter: /^@getpaseo\/plugin(?:\/.*)?$/ }, ({ path: name }) => ({ path: name, namespace: "host" }));
     builder.onLoad({ filter: /.*/, namespace: "host" }, ({ path: name }) => ({ loader: "js", contents:
       name.endsWith("/client/ui") || name.endsWith("/client/react-native") ?
-        `export const useToast=()=>({error:console.error});export const copyText=async text=>{await navigator.clipboard.writeText(text);window.copyWrites.push(text)};` :
+        `export const Modal=Object.assign(()=>null,{Content:()=>null});export const useToast=()=>({error:console.error});export const copyText=async text=>{await navigator.clipboard.writeText(text);window.copyWrites.push(text)};` :
       name.endsWith("/client") ? `export const useAgent=(id,select)=>select({cwd:'/repo'});export const openExternalUrl=async()=>{};
         export const useRpc=()=>async input=>(await fetch('/render',{method:'POST',body:JSON.stringify(input)})).json();` :
         `export const defineRpc=x=>x;` }));
@@ -57,7 +57,7 @@ await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
 const origin = `http://127.0.0.1:${server.address().port}`;
 let browser;
 try {
-  browser = await puppeteer.launch({ executablePath: process.env.CHROME_BIN, headless: true, args: ["--no-sandbox", "--disable-dev-shm-usage"] });
+  browser = await puppeteer.launch({ executablePath: process.env.CHROME_BIN, headless: process.env.RATEX_HEADED !== '1', args: ["--no-sandbox", "--disable-dev-shm-usage", ...(process.env.RATEX_HEADED === '1' ? ['--disable-overlay-scrollbar', '--disable-features=OverlayScrollbar,OverlayScrollbars'] : [])] });
   await browser.defaultBrowserContext().overridePermissions(origin, ["clipboard-read", "clipboard-write", "clipboard-sanitized-write"]);
   const page = await browser.newPage();
   page.on("pageerror", (error) => errors.push(String(error)));
@@ -253,6 +253,70 @@ try {
     await cold.evaluate(async () => document.fonts.ready);
     await cold.close();
   }
+
+  // A classic horizontal scrollbar consumes content height. Outer rect-only
+  // clipping checks miss it even when the bitmap's client viewport is zero.
+  const scrollbarPage = await browser.newPage();
+  scrollbarPage.on('pageerror', error => errors.push(String(error)));
+  await scrollbarPage.setViewport({ width: 700, height: 1000, deviceScaleFactor: 1.25 });
+  await scrollbarPage.goto(origin);
+  await scrollbarPage.waitForFunction(() => window.setMessage);
+  const scrollbarMessage = String.raw`| 符号 | 含义 |
+|---|---|
+| $\mathcal T_{ab}$ | 自由任务 |
+| $q$、$q_{\max}=8K(K-1)$ | 求解预算 |
+
+例子 $e=(21,18,15)$，$j^\star=0$。含站点 0 的对是 $(0,1)$ 和 $(0,2)$。
+
+长公式 $${Array.from({ length: 50 }, (_, i) => `x_{${i}}`).join('+')}$ 后续。`;
+  await scrollbarPage.evaluate(text => window.setMessage({ text }), scrollbarMessage);
+  await scrollbarPage.waitForFunction(() => document.querySelectorAll('#message canvas').length === 8);
+  await scrollbarPage.evaluate(() => document.fonts.ready);
+  const clientGeometry = async () => {
+    await scrollbarPage.waitForFunction(() => [...document.querySelectorAll('#message canvas')].every(canvas =>
+      canvas.parentElement.clientHeight >= canvas.getBoundingClientRect().height - 1));
+    return scrollbarPage.evaluate(() => [...document.querySelectorAll('#message canvas')].map(canvas => ({
+      source: canvas.parentElement.parentElement.textContent,
+      viewport: canvas.parentElement.clientHeight, height: canvas.getBoundingClientRect().height,
+      scrollbar: canvas.parentElement.offsetHeight - canvas.parentElement.clientHeight,
+    })));
+  };
+  const naturalScrollbars = await clientGeometry();
+  // One CSS px overflow models rounding/host sizing and forces all short formula
+  // hosts through the same scrollbar path without changing their bitmap content.
+  const forceOverflow = await scrollbarPage.addStyleTag({ content:
+    '#message canvas { min-width: calc(100% + 1px); } ::-webkit-scrollbar { width: 15px; height: 15px; }' });
+  await scrollbarPage.waitForFunction(() => [...document.querySelectorAll('#message canvas')].every(canvas =>
+    canvas.parentElement.scrollWidth > canvas.parentElement.clientWidth));
+  const forcedScrollbars = await clientGeometry();
+  if (process.env.RATEX_HEADED === '1') assert.ok(forcedScrollbars.every(box => box.scrollbar >= 14), 'exercise real non-overlay scrollbars');
+  const bitmap = await scrollbarPage.$eval('#message canvas', canvas => canvas.toDataURL());
+  const formulaPoint = await scrollbarPage.$eval('#message canvas', canvas => {
+    const rect = canvas.getBoundingClientRect();
+    return { x: rect.x + Math.min(5, rect.width / 2), y: rect.y + rect.height / 2 };
+  });
+  // The host also contains the scrollbar; its center can hit the scrollbar,
+  // so double-click the bitmap area instead of the entire scrolling host.
+  await scrollbarPage.mouse.click(formulaPoint.x, formulaPoint.y, { count: 2 });
+  await scrollbarPage.waitForSelector('[data-testid="formula-source"]');
+  await scrollbarPage.click('[aria-label="Copy formula source"]');
+  await scrollbarPage.waitForFunction(() => window.copyWrites.at(-1) === '$\\mathcal T_{ab}$');
+  await scrollbarPage.click('[aria-label="Show formula"]');
+  await scrollbarPage.waitForFunction(() => document.querySelectorAll('#message canvas').length === 8);
+  await clientGeometry();
+  assert.equal(await scrollbarPage.$eval('#message canvas', canvas => canvas.toDataURL()), bitmap);
+  await scrollbarPage.screenshot({ path: path.join(evidence, 'desktop-classic-scrollbar.png'), fullPage: true });
+  await forceOverflow.evaluate(node => node.remove());
+  for (const width of [390, 1100, 700]) {
+    const original = await scrollbarPage.$('#message canvas');
+    await scrollbarPage.setViewport({ width, height: 1000, deviceScaleFactor: 1.25 });
+    await clientGeometry();
+    assert.ok(await original.evaluate(node => node === document.querySelector('#message canvas')), 'width-only resize preserves canvas');
+    await original.dispose();
+  }
+  await writeFile(path.join(evidence, 'desktop-scrollbar-results.json'), JSON.stringify({ naturalScrollbars, forcedScrollbars }, null, 2));
+  await scrollbarPage.close();
+  results.push('desktop-classic-scrollbar-client-height-source-copy-resize');
 
   // Touch-enabled mobile Chromium, not just a resized desktop window. The iPhone
   // profile below changes viewport/UA only; it is not Safari/WebKit verification.

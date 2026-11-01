@@ -4,6 +4,7 @@ import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { DEFAULT_LATEX } from "../shared/ratex";
 import { CODE_FONT_FAMILY } from "./code-font";
 import { RatexFormula } from "./formula-view";
+import { FormulaText } from "./native-formula";
 
 type PlaygroundProps = {
   theme: PluginSurfaceProps["theme"];
@@ -161,12 +162,10 @@ function FormulaPlayground({ theme, layout }: PlaygroundProps) {
         </Pressable>
       </View>
       <View style={styles.preview}>
-        <RatexFormula
-          latex={latex}
-          displayMode={displayMode}
-          colors={theme.colors}
-          platform={layout.platform}
-        />
+        {displayMode ? <RatexFormula latex={latex} displayMode colors={theme.colors} platform={layout.platform} /> :
+          <FormulaText style={{ color: theme.colors.foreground, fontSize: 16 }}>
+            {'Formula: '}<RatexFormula latex={latex} displayMode={false} colors={theme.colors} platform={layout.platform} />{' in text.'}
+          </FormulaText>}
       </View>
     </ScrollView>
   );

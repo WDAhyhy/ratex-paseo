@@ -2,7 +2,9 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-在 Paseo 对话中渲染 LaTeX 公式，划选时保留原始源码，双击后可在公式原位置查看 TeX 代码。
+在 Paseo 对话中渲染 LaTeX 公式，支持查看和复制源码。
+
+本分支为 **0.1.8-quote.4 兼容增强版**，包含网页 Quote 选区适配和 Android 原生公式图片。请使用 [GitHub 预发布包](https://github.com/WDAhyhy/ratex-paseo/releases/tag/v0.1.8-quote.4)，安装与回滚见 [COMPATIBILITY.md](COMPATIBILITY.md)。本版未发布 npm；下方 npm 和上游 Git 安装说明属于原版插件。
 
 ## 功能
 
@@ -13,7 +15,8 @@
 - 支持键盘操作：聚焦公式后，按 **Enter** 或 **Space** 显示源码。
 - 内嵌公式字体和 WASM 二进制，渲染时无需从 CDN 获取资源。
 - 提供 **RaTeX** 侧栏试写面板和 **RaTeX formula** 工作区面板。
-- 加载中、渲染失败，以及原生 iOS/Android 客户端均显示可选择的 TeX 源码。
+- Android 通过服务端透明 PNG 显示公式；轻点打开宿主源码面板，支持复制和返回，超宽公式局部横向滚动。
+- 加载中或渲染失败时显示可选择的 TeX 源码。原生路径已用 Android App 模拟器验证，iOS 尚未验收。
 
 插件的按钮、悬停提示和无障碍标签统一使用英语。当前使用的 Paseo 插件 SDK 未向插件暴露宿主语言设置。
 
@@ -24,13 +27,24 @@
 | 组件 | 要求 |
 | --- | --- |
 | Paseo | 插件声明兼容 `>=0.13.0`，不设上限（含测试版），开发使用的 SDK 为 `0.13.2`。Paseo 0.8 至 0.12 请安装 `ratex-math-render@0.1.6` |
-| 客户端 | 网页端支持公式渲染和双击交互；原生客户端显示源码 |
+| 客户端 | 网页 Canvas 与 Android 原生 PNG 渲染；iOS 真机待验证 |
 | 开发环境 | 建议 Node.js 22.14+；已在 Node.js 22.21.1、npm 11.10.1 下验证 |
 | 安装环境 | daemon 所在机器可运行 Node.js 和 npm；Paseo 版本需要支持 npm 插件来源 |
 
 目标 daemon 需要已启用 Paseo 插件。插件作为可信代码在 daemon 和连接的客户端中运行。
 
-## 从 npm 安装（推荐）
+## 安装此兼容版
+
+在 daemon 所在主机执行；不要与另一个 RaTeX 同时启用。如果已从这个 fork 的 Git 来源安装同一 ID，用 `paseo plugin update ratex-formula --ref v0.1.8-quote.4` 更新。目录安装或上游来源不能用这条命令切换到本 fork。
+
+```bash
+paseo plugin install git:WDAhyhy/ratex-paseo --ref v0.1.8-quote.4 --id ratex-formula
+paseo plugin ls ratex-formula
+```
+
+安卓手机和平板完全退出 Paseo App 后重新打开，以加载新的插件 bundle。无需清数据、重新配对或重启 daemon。只会渲染助手消息中的公式，用户消息保持原生布局和源码。
+
+## 原版 npm 安装
 
 在 Paseo daemon 所在机器安装已发布的 [ratex-math-render](https://www.npmjs.com/package/ratex-math-render)：
 
@@ -131,7 +145,7 @@ a^2 + b^2 = c^2
 - 图片显示为标签和 URL，不会加载图片内容。
 - 指向本地文件的链接和行内代码（如 `client/message.tsx:105`）会像 Paseo 原生消息一样在工作区中打开（仅网页端）。行内代码里只有文件名（如 `message.tsx`）时仍显示为普通代码，因为插件无法使用 Paseo 的文件查找。
 - 同一条 RaTeX 消息内的选区可恢复原始 Markdown 和 TeX；原生 copy 监听兼容 Quote 的合成剪贴板事件。见 [兼容版交付说明](COMPATIBILITY.md)。
-- 原生客户端显示 TeX 源码；Canvas 渲染和双击查看源码属于网页端功能。
+- 原生客户端使用服务端 PNG，轻点打开 Paseo 源码面板；超长行内公式独占一行局部横向滚动。网页 Quote 选区能力不等于安卓原生选区能力。
 - 不支持的公式会回退为源码显示。
 
 ## 自动生成的资源
@@ -142,6 +156,7 @@ a^2 + b^2 = c^2
 | --- | --- |
 | `server/vendor/ratex-wasm-bytes.ts` | `npm run embed-wasm` |
 | `client/vendor/fonts.ts` | `npm run embed-fonts` |
+| `server/vendor/native-fonts.ts` | `node scripts/embed-native-fonts.mjs` |
 
 这些文件由 Git 忽略，并根据锁定版本的 `ratex-wasm` 依赖重新生成。WASM 二进制先经 gzip 压缩再以内嵌 Base64 保存，服务端初始化时解压一次；测试会验证解压后的字节与上游二进制完全一致。如果安装时使用了 `--ignore-scripts`，需要随后手动执行 `npm run prepare`。`npm test` 会检查资源与依赖的一致性。
 

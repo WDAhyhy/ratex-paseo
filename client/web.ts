@@ -42,6 +42,8 @@ type HostNode = {
   innerHTML: string;
   style: { display: string; width: string; height: string; maxWidth: string; overflowX: string; overflowY: string; verticalAlign: string };
   clientWidth?: number;
+  clientHeight: number;
+  offsetHeight: number;
   parentElement?: { clientWidth: number } | null;
   setAttribute(name: string, value: string): void;
   removeAttribute(name: string): void;
@@ -183,6 +185,16 @@ export function FormulaCanvas({
 
     let signature = "";
     let usedFonts: string[] = [];
+    let inlineLayout: { height: number; baseline: number } | undefined;
+    const fitInlineScrollbar = () => {
+      if (!inlineLayout) return;
+      // A classic horizontal scrollbar takes space *inside* the fixed-height
+      // host. Its thickness must be added below the bitmap, not over its ink.
+      // Re-measure on width-only resizes without replacing the selected canvas.
+      const scrollbar = Math.max(0, host.offsetHeight - host.clientHeight);
+      host.style.height = `${inlineLayout.height + scrollbar}px`;
+      host.style.verticalAlign = `${-(inlineLayout.height - inlineLayout.baseline + scrollbar)}px`;
+    };
     const draw = () => {
       const node = resolveHost(hostRef.current);
       if (!node) return;
@@ -195,7 +207,10 @@ export function FormulaCanvas({
       // Formula pixels do not depend on viewport width: the containing block scrolls.
       // Avoid replacing a selected canvas merely because the transcript was resized.
       const next = `${dpr}|${fontSize}|${padding}`;
-      if (next === signature) return;
+      if (next === signature) {
+        fitInlineScrollbar();
+        return;
+      }
       signature = next;
       const canvas = document.createElement("canvas");
       const layout = drawFormula(displayList, canvas as unknown as HTMLCanvasElement,
@@ -205,6 +220,7 @@ export function FormulaCanvas({
       if (inline) {
         // A formula is atomic TeX, so it cannot wrap between glyphs. Keep its
         // natural bitmap and scroll only the inline host when the phone is narrow.
+        inlineLayout = { height: layout.height / dpr, baseline: layout.baseline / dpr };
         node.style.display = "inline-block";
         node.style.width = `${layout.width / dpr}px`;
         node.style.height = `${layout.height / dpr}px`;
@@ -222,6 +238,7 @@ export function FormulaCanvas({
       canvas.setAttribute("aria-hidden", "true");
       node.innerHTML = "";
       node.appendChild(canvas);
+      fitInlineScrollbar();
     };
 
     draw();

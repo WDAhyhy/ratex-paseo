@@ -87,6 +87,18 @@ export const ratexMessageSchema = z.object({
   text: z.string(),
 });
 
+export const renderNativeLatexRpc = defineRpc({
+  name: "ratex.render-native",
+  input: z.object({
+    latex: z.string().min(1).max(MAX_LATEX_LENGTH), displayMode: z.boolean(), color: z.string().optional(),
+    fontSize: z.number().min(8).max(64).optional(), density: z.number().min(1).max(4).optional(),
+  }),
+  output: z.discriminatedUnion("ok", [
+    z.object({ ok: z.literal(true), png: z.string(), width: z.number(), height: z.number(), baseline: z.number(), density: z.number() }),
+    z.object({ ok: z.literal(false), error: z.string() }),
+  ]),
+});
+
 export const renderLatexRpc = defineRpc({
   name: "ratex.render",
   input: z.object({

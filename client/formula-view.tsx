@@ -9,6 +9,7 @@ import { renderLatexRpc } from "../shared/ratex";
 import { CODE_FONT_FAMILY } from "./code-font";
 import { FormulaCanvas, isWebPlatform } from "./web";
 import { FormulaSource } from "./formula-source";
+import { NativeFormula } from "./native-formula";
 
 export function RatexFormula({
   latex,
@@ -26,6 +27,14 @@ export function RatexFormula({
   source?: string;
   /** em size to draw at, so math in a heading matches the heading. */
   fontSize?: number;
+}) {
+  if (!isWebPlatform(platform)) return <NativeFormula latex={latex} source={source ?? mathSource(latex, displayMode)}
+    displayMode={displayMode} colors={colors} fontSize={fontSize} />;
+  return <WebFormula latex={latex} displayMode={displayMode} colors={colors} platform={platform} source={source} fontSize={fontSize} />;
+}
+
+function WebFormula({ latex, displayMode, colors, platform, source, fontSize = CHAT_FONT_SIZE }: {
+  latex: string; displayMode: boolean; colors: PluginTheme["colors"]; platform: string; source?: string; fontSize?: number;
 }) {
   const renderLatex = useRpc(renderLatexRpc);
   const web = isWebPlatform(platform);

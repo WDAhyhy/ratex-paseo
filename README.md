@@ -2,7 +2,9 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-Render LaTeX formulas directly in Paseo conversations, select and copy their original source, and double-click a formula to inspect its TeX in place.
+Render LaTeX formulas directly in Paseo conversations, with source inspection and copying.
+
+This branch is the **0.1.8-quote.4 compatibility build**: web Quote selection plus Android-native formula images. Use the [GitHub prerelease](https://github.com/WDAhyhy/ratex-paseo/releases/tag/v0.1.8-quote.4) and [installation/rollback instructions](COMPATIBILITY.md). This build is not published to npm; the npm and upstream Git instructions below describe the original plugin.
 
 ## Features
 
@@ -13,7 +15,8 @@ Render LaTeX formulas directly in Paseo conversations, select and copy their ori
 - Keyboard access: focus a formula and press **Enter** or **Space** to show its source.
 - Embeds the math fonts and WASM binary; rendering does not fetch assets from a CDN.
 - Provides a **RaTeX** sidebar scratch pad and a **RaTeX formula** workspace panel.
-- Shows selectable TeX while loading, on render failure, and on native iOS/Android clients.
+- Android uses transparent formula images rendered by the daemon; tap to open the host source sheet, copy, and return. Wide formulas scroll locally.
+- Shows selectable TeX while loading or on render failure. The shared native path has Android App emulator coverage; iOS is unverified.
 
 Plugin controls, tooltips, and accessibility labels use English. The installed Paseo plugin SDK does not expose the app's language setting.
 
@@ -24,13 +27,24 @@ Formula messages use Paseo's default chat text sizes: 15px on web and 16px on iO
 | Component | Requirement |
 | --- | --- |
 | Paseo | Manifest targets `>=0.13.0` with no upper bound, including prereleases; developed against SDK `0.13.2`. For Paseo 0.8 to 0.12, install `ratex-math-render@0.1.6` |
-| Client | Web for rendered formulas and double-click interaction; native clients show source |
+| Client | Web Canvas and Android-native PNG rendering; iOS device testing pending |
 | Development runtime | Node.js 22.14+ recommended; tested with Node.js 22.21.1 and npm 11.10.1 |
 | Installation runtime | Node.js and npm available on the daemon host; use a Paseo version that supports npm plugin sources |
 
 Paseo plugins must already be enabled on the target daemon. Plugins run as trusted code on that daemon and in its connected clients.
 
-## Install from npm (recommended)
+## Install this compatibility build
+
+Run on the daemon host. Enable only one RaTeX runtime ID. For this ID already installed from this fork's Git source, use `paseo plugin update ratex-formula --ref v0.1.8-quote.4`. That command does not migrate a directory installation or switch an upstream installation to this fork.
+
+```bash
+paseo plugin install git:WDAhyhy/ratex-paseo --ref v0.1.8-quote.4 --id ratex-formula
+paseo plugin ls ratex-formula
+```
+
+Fully close and reopen Paseo on Android phones/tablets to load the new plugin bundle. No data clearing, re-pairing, or daemon restart is needed. Formulas in assistant messages render; user messages retain native layout and TeX source.
+
+## Original npm installation
 
 Install the published [ratex-math-render](https://www.npmjs.com/package/ratex-math-render) package on your Paseo daemon host:
 
@@ -131,7 +145,7 @@ Messages without a complete formula retain Paseo's built-in Markdown renderer. F
 - Images are shown as their label and URL, rather than fetched and displayed.
 - Links and code spans that name a local file, such as `client/message.tsx:105`, open it in the workspace like Paseo's own messages (web only). A bare file name in a code span, such as `message.tsx`, stays plain code because plugins cannot use Paseo's file lookup.
 - Copying a selection within one RaTeX message restores its original Markdown and TeX through a local copy handler, including Quote's synthetic clipboard events. See [compatibility delivery](COMPATIBILITY.md).
-- Native clients display TeX source; Canvas rendering and double-click source inspection are web features.
+- Native clients use daemon-rendered PNGs. Tap opens Paseo’s source sheet; long inline formulas move to their own horizontally scrolling row. Browser Quote selection is not an Android-native selection feature.
 - Unsupported formulas fall back to their source.
 
 ## Generated assets
@@ -142,6 +156,7 @@ Messages without a complete formula retain Paseo's built-in Markdown renderer. F
 | --- | --- |
 | `server/vendor/ratex-wasm-bytes.ts` | `npm run embed-wasm` |
 | `client/vendor/fonts.ts` | `npm run embed-fonts` |
+| `server/vendor/native-fonts.ts` | `node scripts/embed-native-fonts.mjs` |
 
 These files are ignored by Git and regenerated from the pinned `ratex-wasm` dependency. The WASM binary is gzip-compressed before Base64 embedding and decompressed once during server initialization. Tests verify that decompression reproduces the upstream binary byte for byte. Do not use `--ignore-scripts` unless you then run `npm run prepare`. Asset consistency is checked by `npm test`.
 
