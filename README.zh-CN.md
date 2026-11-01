@@ -4,7 +4,7 @@
 
 在 Paseo 对话中渲染 LaTeX 公式，支持查看和复制源码。
 
-本分支为 **0.1.8-quote.4 兼容增强版**，包含网页 Quote 选区适配和 Android 原生公式图片。请使用 [GitHub 预发布包](https://github.com/WDAhyhy/ratex-paseo/releases/tag/v0.1.8-quote.4)，安装与回滚见 [COMPATIBILITY.md](COMPATIBILITY.md)。本版未发布 npm；下方 npm 和上游 Git 安装说明属于原版插件。
+本分支为 **0.1.8-quote.5 兼容增强版**，包含网页 Quote 选区适配和 Android 原生公式图片。请使用 [GitHub 预发布包](https://github.com/WDAhyhy/ratex-paseo/releases/tag/v0.1.8-quote.5)，安装与回滚见 [COMPATIBILITY.md](COMPATIBILITY.md)。本版未发布 npm；下方 npm 和上游 Git 安装说明属于原版插件。
 
 ## 功能
 
@@ -35,10 +35,10 @@
 
 ## 安装此兼容版
 
-在 daemon 所在主机执行；不要与另一个 RaTeX 同时启用。如果已从这个 fork 的 Git 来源安装同一 ID，用 `paseo plugin update ratex-formula --ref v0.1.8-quote.4` 更新。目录安装或上游来源不能用这条命令切换到本 fork。
+在 daemon 所在主机执行；不要与另一个 RaTeX 同时启用。如果已从这个 fork 的 Git 来源安装同一 ID，用 `paseo plugin update ratex-formula --ref v0.1.8-quote.5` 更新。目录安装或上游来源不能用这条命令切换到本 fork。
 
 ```bash
-paseo plugin install git:WDAhyhy/ratex-paseo --ref v0.1.8-quote.4 --id ratex-formula
+paseo plugin install git:WDAhyhy/ratex-paseo --ref v0.1.8-quote.5 --id ratex-formula
 paseo plugin ls ratex-formula
 ```
 

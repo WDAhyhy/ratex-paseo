@@ -64,3 +64,29 @@ test("literal NUL and HTML stay text, never become math placeholders or executab
   assert.equal(math.length, 1);
   assert.equal(doc.blocks[0].type, "paragraph");
 });
+
+
+test('multiline aligned with blank lines is one atomic block before adjacent formulas',()=>{
+  const source=String.raw`Before
+
+$$
+\begin{aligned}
+a&=b\\
+
+c&=d
+\end{aligned}
+$$
+$$e=f$$
+
+After $z$`;
+  const doc=sourceMarkdown(source);
+  const blocks=doc.blocks.filter(b=>b.type==='display-math');
+  assert.equal(blocks.length,2);
+  assert.equal(blocks[0].latex,String.raw`\begin{aligned}
+a&=b\\
+
+c&=d
+\end{aligned}`);
+  for(const block of blocks){const span=doc.spans.get(doc.ids.get(block)!);assert(span);assert.equal(source.slice(span.start,span.end),block.source);}
+  assert.equal(spanFor(doc,'math','$z$').start,source.indexOf('$z$'));
+});

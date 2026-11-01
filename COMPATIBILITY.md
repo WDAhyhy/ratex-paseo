@@ -1,6 +1,6 @@
 # RaTeX / Quote 兼容增强版
 
-版本：`ratex-math-render@0.1.8-quote.4`。分支：`compat/quote-selection`。源码和安装包发布于 https://github.com/WDAhyhy/ratex-paseo ，未发布 npm。
+版本：`ratex-math-render@0.1.8-quote.5`。分支：`compat/quote-selection`。源码和安装包发布于 https://github.com/WDAhyhy/ratex-paseo ，未发布 npm。
 
 ## 固定源码与宿主合同
 
@@ -44,7 +44,8 @@ Quote `client/web.ts` 的实际链路：`pointerup -> setTimeout(sync,0) -> read
 ## Android 原生 App
 
 - 原生端调用独立 `ratex.render-native` RPC：服务端使用相同 WASM 排版、固定 KaTeX 字体轮廓生成透明 PNG，React Native `Image` 显示；不依赖 DOM、WebView、手机字体或额外原生库。
-- 实际 glyph ink bounds 决定尺寸，支持 2–4 倍密度；块公式保持自然字号、局部水平滚动。超长行内公式转为独占一行的局部滚动区域，按真实段落/表格单元格宽度限制，不撑宽整页。
+- 实际 glyph ink bounds 决定尺寸，支持 2–4 倍密度；块公式保持自然字号、局部水平滚动。大块公式按最多 1536×1536 设备像素分片显示，整块对齐/分式/括号不按 TeX 源码拆行；总像素预算仍有限。超长行内公式转为独占一行的局部滚动区域，按真实段落/表格单元格宽度限制，不撑宽整页。
+- 内嵌 OFL 授权 Noto CJK 字体子集，使 `cases`、`aligned` 中的基本汉字条件文字不再令整块回退源码；不依赖服务器或平板另装字体。独占一行的 `$$` 块允许公式内部空行，原始源码及 UTF-16 offset 保持不变。
 - 轻点公式使用 Paseo 官方源码面板，支持复制和返回；宿主将面板移出 Android Text 子树，避免表格行内公式的弹窗出现负高度。
 - 服务端只绘制公式，不执行 TeX 外部命令或读取远程字体；位图尺寸、字符数与内存缓存均有界。不支持的字形或渲染失败显示可选择原始 TeX。
 - 原版 Quote 未修改；原生安卓没有浏览器 `Selection` / 合成 `ClipboardEvent`，不能将 Web 端 Quote 框选功能视为原生已验证功能。

@@ -39,8 +39,31 @@ test('native rendering keeps density, size, colors and caching distinct', async 
 });
 
 test('invalid or unsupported native formulas fail to selectable source, not replacement boxes', async () => {
-  for (const latex of [String.raw`\definitelyNotACommand{x}`, String.raw`\text{中文}`, 'x'.repeat(4097)]) {
+  for (const latex of [String.raw`\definitelyNotACommand{x}`, String.raw`\text{🦄}`, 'x'.repeat(4097)]) {
     const result = await renderNativeFormula({ latex, displayMode: false });
     assert.equal(result.ok, false);
   }
+});
+
+
+test('native multiline conditions include Chinese text and bounded image tiles', async () => {
+  const latex = String.raw`\ell_Q=\begin{cases}\Phi_Q(\lambda^0),&\lvert Q\rvert\ge2\text{ 且 }H_Q\ge\max_j\alpha^Q_j\\ T_Q,&\text{否则(含单站点类)}\end{cases}`;
+  const chinese = await renderNativeFormula({latex,displayMode:true,color:'#eeeeee',density:3});
+  assert(chinese.ok,JSON.stringify(chinese));
+  const rows = Array.from({length:40},(_,i)=>String.raw`F_{${i}}(x)&=\frac{x_{${i}}^2+\sum_{j=1}^n a_j}{1+\sqrt{y_{${i}}}}`);
+  const tall = await renderNativeFormula({latex:String.raw`\begin{aligned}`+rows.join('\\\\\n')+String.raw`\end{aligned}`,displayMode:true,color:'#eeeeee',density:4});
+  assert(tall.ok,JSON.stringify(tall));
+  assert(renderNativeLatexRpc.output.safeParse(tall).success);
+  assert(tall.height*4>4096,'reproduces old whole-bitmap rejection');
+  assert(tall.tiles && tall.tiles.length>1);
+  let pixels=0;
+  for(const tile of tall.tiles){
+    const png=PNG.sync.read(Buffer.from(tile.png,'base64'));
+    assert(png.width<=1536 && png.height<=1536,'safe Android decode dimensions');
+    assert.equal(png.width,Math.round(tile.width*tall.density));
+    assert.equal(png.height,Math.round(tile.height*tall.density));
+    assert(tile.x+tile.width<=tall.width+1e-6 && tile.y+tile.height<=tall.height+1e-6);
+    pixels+=png.width*png.height;
+  }
+  assert.equal(pixels,Math.round(tall.width*4)*Math.round(tall.height*4),'tiles cover full formula without lost rows');
 });

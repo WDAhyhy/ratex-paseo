@@ -74,9 +74,15 @@ export function splitMathSegments(input: string): MathSegment[] {
 
     if (input.startsWith("$$", cursor)) {
       const close = input.indexOf("$$", cursor + 2);
-      // Unterminated (still streaming) or spanning a blank line: not a formula. Skip the
-      // opener and keep scanning, so one stray $$ cannot swallow the rest of the message.
-      if (close === -1 || input.slice(cursor + 2, close).includes("\n\n")) {
+      // Blank lines are valid inside a line-delimited display block, but stray
+      // dollars in prose must not swallow later paragraphs.
+      const ownLine = (at: number) => {
+        const end = input.indexOf("\n", at + 2);
+        return input.slice(input.lastIndexOf("\n", at - 1) + 1, at).trim() === "" &&
+          input.slice(at + 2, end < 0 ? input.length : end).trim() === "";
+      };
+      if (close === -1 || (/\r?\n[\t ]*\r?\n/.test(input.slice(cursor + 2, close)) &&
+          !(ownLine(cursor) && ownLine(close)))) {
         cursor += 2;
         continue;
       }

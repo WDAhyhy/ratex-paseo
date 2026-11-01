@@ -87,6 +87,7 @@ export const ratexMessageSchema = z.object({
   text: z.string(),
 });
 
+const nativeTileSchema = z.object({ png: z.string(), x: z.number(), y: z.number(), width: z.number(), height: z.number() });
 export const renderNativeLatexRpc = defineRpc({
   name: "ratex.render-native",
   input: z.object({
@@ -94,7 +95,7 @@ export const renderNativeLatexRpc = defineRpc({
     fontSize: z.number().min(8).max(64).optional(), density: z.number().min(1).max(4).optional(),
   }),
   output: z.discriminatedUnion("ok", [
-    z.object({ ok: z.literal(true), png: z.string(), width: z.number(), height: z.number(), baseline: z.number(), density: z.number() }),
+    z.object({ ok: z.literal(true), png: z.string(), width: z.number(), height: z.number(), baseline: z.number(), density: z.number(), tiles: z.array(nativeTileSchema).optional() }),
     z.object({ ok: z.literal(false), error: z.string() }),
   ]),
 });

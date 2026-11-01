@@ -7,10 +7,12 @@ import { formulaDepth } from '../shared/layout.ts';
 import type { DisplayList } from '../shared/ratex.ts';
 import { initRatex, renderLatexToDisplayList } from './ratex.ts';
 import { NATIVE_FONT_INDEX, NATIVE_FONTS_GZIP } from './vendor/native-fonts.ts';
+import cjkAsset from './assets/native-cjk.json' with { type: 'json' };
 
 type Color = { r: number; g: number; b: number; a: number };
 type Command = { type: string; x?: number; y?: number; x1?: number; y1?: number; x2?: number; y2?: number };
 type Shape = { path: Command[]; color: string; stroke?: number };
+type NativeTile = { png: string; x: number; y: number; width: number; height: number };
 const fonts = new Map<string, Font>();
 function getFont(name: string): Font {
   if (!fonts.size) {
@@ -20,6 +22,10 @@ function getFont(name: string): Font {
       fonts.set(id, opentype.parse(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)));
     }
   }
+  if (name.startsWith('CJK-') && !fonts.has(name)) {
+    const bytes = gunzipSync(Buffer.from(cjkAsset.gzip, 'base64'));
+    fonts.set(name, opentype.parse(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)));
+  }
   const font = fonts.get(name);
   if (!font) throw new Error(`Unsupported native formula font: ${name}`);
   return font;
@@ -27,7 +33,7 @@ function getFont(name: string): Font {
 const css = (c: Color) => `rgba(${Math.round(c.r * 255)},${Math.round(c.g * 255)},${Math.round(c.b * 255)},${c.a})`;
 const cache = new Map<string, { result: NativeBitmap; bytes: number }>();
 let cacheBytes = 0;
-export type NativeBitmap = { ok: true; png: string; width: number; height: number; baseline: number; density: number };
+export type NativeBitmap = { ok: true; png: string; width: number; height: number; baseline: number; density: number; tiles?: NativeTile[] };
 
 /** Font outlines are painted on the daemon, so Android needs no webfont or DOM. */
 export async function renderNativeFormula({ latex, displayMode, color, fontSize = 16, density = 3 }: {
@@ -85,28 +91,41 @@ export async function renderNativeFormula({ latex, displayMode, color, fontSize 
     }
     const ox = pad - Math.floor(left), oy = pad - Math.floor(top);
     const width = Math.max(1, Math.ceil(right) + ox + pad), height = Math.max(1, Math.ceil(bottom) + oy + pad);
-    if (width > 16384 || height > 4096 || width * height > 4_000_000) throw new Error('Native formula bitmap exceeds size limit');
-    const image = make(width, height), ctx = image.getContext('2d');
-    image.data.fill(0); // PureImage allocates opaque black unless explicitly cleared.
-    for (const shape of shapes) {
-      ctx.beginPath();
-      for (const c of shape.path) {
-        if (c.type === 'M') ctx.moveTo(c.x! + ox, c.y! + oy);
-        else if (c.type === 'L') ctx.lineTo(c.x! + ox, c.y! + oy);
-        else if (c.type === 'C') ctx.bezierCurveTo(c.x1! + ox, c.y1! + oy, c.x2! + ox, c.y2! + oy, c.x! + ox, c.y! + oy);
-        else if (c.type === 'Q') ctx.quadraticCurveTo(c.x1! + ox, c.y1! + oy, c.x! + ox, c.y! + oy);
-        else if (c.type === 'Z') ctx.closePath();
+    // Android decoders/GPU textures must never receive an enormous single image.
+    // Tile the painted geometry rather than splitting TeX, preserving alignment,
+    // spanning brackets and fractions across row/column boundaries.
+    if (width > 65536 || height > 32768 || width * height > 16_000_000) throw new Error('Native formula bitmap exceeds size limit');
+    const tileSize = 1536;
+    const tiles: NativeTile[] = [];
+    for (let ty = 0; ty < height; ty += tileSize) for (let tx = 0; tx < width; tx += tileSize) {
+      const tw = Math.min(tileSize, width - tx), th = Math.min(tileSize, height - ty);
+      const image = make(tw, th), ctx = image.getContext('2d');
+      image.data.fill(0);
+      for (const shape of shapes) {
+        const xs = shape.path.flatMap(c => [c.x, c.x1, c.x2].filter((v): v is number => v !== undefined));
+        const ys = shape.path.flatMap(c => [c.y, c.y1, c.y2].filter((v): v is number => v !== undefined));
+        if (xs.length && (Math.max(...xs) + ox < tx || Math.min(...xs) + ox > tx + tw ||
+            Math.max(...ys) + oy < ty || Math.min(...ys) + oy > ty + th)) continue;
+        ctx.beginPath();
+        for (const c of shape.path) {
+          if (c.type === 'M') ctx.moveTo(c.x! + ox - tx, c.y! + oy - ty);
+          else if (c.type === 'L') ctx.lineTo(c.x! + ox - tx, c.y! + oy - ty);
+          else if (c.type === 'C') ctx.bezierCurveTo(c.x1! + ox - tx, c.y1! + oy - ty, c.x2! + ox - tx, c.y2! + oy - ty, c.x! + ox - tx, c.y! + oy - ty);
+          else if (c.type === 'Q') ctx.quadraticCurveTo(c.x1! + ox - tx, c.y1! + oy - ty, c.x! + ox - tx, c.y! + oy - ty);
+          else if (c.type === 'Z') ctx.closePath();
+        }
+        ctx.fillStyle = shape.color; ctx.strokeStyle = shape.color;
+        if (shape.stroke) { ctx.lineWidth = shape.stroke; ctx.stroke(); } else ctx.fill();
       }
-      ctx.fillStyle = shape.color; ctx.strokeStyle = shape.color;
-      if (shape.stroke) { ctx.lineWidth = shape.stroke; ctx.stroke(); } else ctx.fill();
+      const chunks: Buffer[] = [];
+      const stream = new Writable({ write(chunk, _encoding, next) { chunks.push(Buffer.from(chunk)); next(); } });
+      await encodePNGToStream(image, stream);
+      tiles.push({ png: Buffer.concat(chunks).toString('base64'), x: tx / density, y: ty / density,
+        width: tw / density, height: th / density });
     }
-    const chunks: Buffer[] = [];
-    const stream = new Writable({ write(chunk, _encoding, next) { chunks.push(Buffer.from(chunk)); next(); } });
-    await encodePNGToStream(image, stream);
-    const png = Buffer.concat(chunks).toString('base64');
-    const result: NativeBitmap = { ok: true, png, width: width / density, height: height / density,
-      baseline: (list.height * em + oy) / density, density };
-    const bytes = png.length * 2;
+    const result: NativeBitmap = { ok: true, png: tiles[0].png, width: width / density, height: height / density,
+      baseline: (list.height * em + oy) / density, density, ...(tiles.length > 1 ? { tiles } : {}) };
+    const bytes = tiles.reduce((sum, tile) => sum + tile.png.length * 2, 0);
     if (bytes < 1_000_000) {
       while (cache.size >= 128 || cacheBytes + bytes > 8_000_000) {
         const first = cache.keys().next().value!; cacheBytes -= cache.get(first)!.bytes; cache.delete(first);

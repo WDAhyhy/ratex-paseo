@@ -4,7 +4,7 @@
 
 Render LaTeX formulas directly in Paseo conversations, with source inspection and copying.
 
-This branch is the **0.1.8-quote.4 compatibility build**: web Quote selection plus Android-native formula images. Use the [GitHub prerelease](https://github.com/WDAhyhy/ratex-paseo/releases/tag/v0.1.8-quote.4) and [installation/rollback instructions](COMPATIBILITY.md). This build is not published to npm; the npm and upstream Git instructions below describe the original plugin.
+This branch is the **0.1.8-quote.5 compatibility build**: web Quote selection plus Android-native formula images. Use the [GitHub prerelease](https://github.com/WDAhyhy/ratex-paseo/releases/tag/v0.1.8-quote.5) and [installation/rollback instructions](COMPATIBILITY.md). This build is not published to npm; the npm and upstream Git instructions below describe the original plugin.
 
 ## Features
 
@@ -35,10 +35,10 @@ Paseo plugins must already be enabled on the target daemon. Plugins run as trust
 
 ## Install this compatibility build
 
-Run on the daemon host. Enable only one RaTeX runtime ID. For this ID already installed from this fork's Git source, use `paseo plugin update ratex-formula --ref v0.1.8-quote.4`. That command does not migrate a directory installation or switch an upstream installation to this fork.
+Run on the daemon host. Enable only one RaTeX runtime ID. For this ID already installed from this fork's Git source, use `paseo plugin update ratex-formula --ref v0.1.8-quote.5`. That command does not migrate a directory installation or switch an upstream installation to this fork.
 
 ```bash
-paseo plugin install git:WDAhyhy/ratex-paseo --ref v0.1.8-quote.4 --id ratex-formula
+paseo plugin install git:WDAhyhy/ratex-paseo --ref v0.1.8-quote.5 --id ratex-formula
 paseo plugin ls ratex-formula
 ```
 

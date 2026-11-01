@@ -35,7 +35,10 @@ export function sourceMarkdown(source: string): SourceDocument {
     offset += raw.length;
     if (segment.type === "text") return raw;
     maths.push({ ...segment, start, end: offset, atomic: true });
-    return raw.replace(/[^\r\n]/g, "x");
+    // Use non-line-breaking placeholders for internal math newlines, so a blank
+    // line in aligned/cases cannot split one formula into multiple Markdown nodes.
+    // Offsets and the surrounding prose's line breaks remain unchanged.
+    return raw.replace(/[^]/g, "x");
   }).join("");
   const tree = fromMarkdown(masked, { extensions: [gfm()], mdastExtensions: [gfmFromMarkdown()] });
   const bounds = (node: Nodes): SourceSpan => ({

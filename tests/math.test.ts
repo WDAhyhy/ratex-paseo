@@ -107,3 +107,14 @@ test("escaped display delimiters remain text and even backslashes allow math", (
   assert.equal(hasCompleteMath(String.raw`\\(x\\)`), false);
   assert.equal(hasCompleteMath(String.raw`\\$x$`), true);
 });
+
+
+test('line-delimited display formulas retain internal blank lines and adjacent blocks', () => {
+  for(const nl of ['\n','\r\n']){
+    const source=['$$',String.raw`\begin{aligned}`,String.raw`a&=b\\`,'',String.raw`c&=d`,String.raw`\end{aligned}`,'$$','$$','e=f','$$'].join(nl);
+    const maths=splitMathSegments(source).filter(s=>s.type==='math');
+    assert.equal(maths.length,2);
+    assert(maths[0].latex.includes(nl+nl));
+    assert.equal(splitMathSegments(source).map(s=>s.type==='math'?s.source:s.text).join(''),source);
+  }
+});

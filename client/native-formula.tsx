@@ -42,9 +42,14 @@ export function NativeFormula({ latex, source, displayMode, colors, fontSize }: 
   const result = query.data;
   if (!result?.ok || imageFailed) return <Text selectable style={{ color: colors.foregroundMuted,
     fontFamily: CODE_FONT_FAMILY, fontSize }}>{source}</Text>;
-  const image = <Image testID="native-formula-image" accessibilityLabel={source}
-    source={{ uri: `data:image/png;base64,${result.png}` }} resizeMode="contain"
-    style={{ width: result.width, height: result.height }} onError={() => setImageFailed(true)} />;
+  const imageProps = { resizeMode: 'contain' as const, onError: () => setImageFailed(true) };
+  const image = result.tiles ? <View testID="native-formula-tiles" style={{ width: result.width, height: result.height }}>
+    {result.tiles.map((tile, index) => <Image key={index} testID="native-formula-image" {...imageProps}
+      source={{ uri: `data:image/png;base64,${tile.png}` }}
+      style={{ position: 'absolute', left: tile.x, top: tile.y, width: tile.width, height: tile.height }} />)}
+  </View> : <Image testID="native-formula-image" accessibilityLabel={source} {...imageProps}
+    source={{ uri: `data:image/png;base64,${result.png}` }}
+    style={{ width: result.width, height: result.height }} />;
   // The host sheet portals outside Text attachments, including formulas in table cells.
   const modal = sourceOpen && <Modal title="Formula source" open onOpenChange={setSourceOpen}>
     <Modal.Content>
@@ -53,8 +58,8 @@ export function NativeFormula({ latex, source, displayMode, colors, fontSize }: 
   </Modal>;
   if (!displayMode) {
     // Android Text attachments are atomic: oversized images cannot wrap or scroll by themselves.
-    if (result.width > availableWidth) return <>{'\n'}
-      <View style={{ width: availableWidth, height: result.height }}>
+    if (result.tiles || result.width > availableWidth) return <>{'\n'}
+      <View style={{ width: Math.min(result.width, availableWidth), height: result.height }}>
         <ScrollView horizontal nestedScrollEnabled showsHorizontalScrollIndicator style={{ flex: 1 }}>
           <Pressable accessibilityRole="button" accessibilityLabel="View formula source"
             onPress={() => setSourceOpen(true)}>{image}</Pressable>
@@ -66,6 +71,7 @@ export function NativeFormula({ latex, source, displayMode, colors, fontSize }: 
   }
   return <View style={{ minWidth: 0, maxWidth: '100%', width: '100%', paddingVertical: 8 }}>
     <ScrollView horizontal nestedScrollEnabled showsHorizontalScrollIndicator
+      style={{ height: result.height, flexGrow: 0 }}
       contentContainerStyle={{ alignItems: 'center' }}>
       <Pressable accessibilityRole="button" accessibilityLabel="View formula source"
         onPress={() => setSourceOpen(true)}>{image}</Pressable>
